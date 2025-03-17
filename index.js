@@ -13,7 +13,7 @@ const app = express();
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'raki2024',
+  password: process.env.DB_PASSWORD || 'password',
   database: process.env.DB_NAME || 'licenta',
   port: process.env.DB_PORT || 3306,
   waitForConnections: true,
@@ -234,7 +234,7 @@ app.post('/tables/:tableName/indexes', async (req, res) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 4700;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
