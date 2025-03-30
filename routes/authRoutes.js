@@ -1,7 +1,8 @@
-// routes/authRoutes.js
-
+// Initialize Express Router
 const express = require('express');
 const router = express.Router();
+
+// Import controllers and middleware
 const authController = require('../controllers/authController');
 const authMiddleware = require('../middleware/authMiddleware');
 

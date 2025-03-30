@@ -1,16 +1,21 @@
-// server.js
+
+// Port variable to use for express instance(app)
 const PORT = process.env.PORT || 4700;
 
+// Initialize express instance(app)
 const express = require('express');
+// Cors (cross-origin resource sharing) connects the frontend to the backend
 const cors = require('cors');
+// Dotenv is used to load environment variables from a .env file into process.env
 require('dotenv').config();
 
-// In your main app.js or server.js
+// Prisma is an orm (object relational mapping) used to connect to the database
 const prisma = require('./prisma/client');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
 
+// Initialize express app
 const app = express();
 
 // Middleware
@@ -18,7 +23,7 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
 
 // Root route
 app.get('/', (req, res) => {
