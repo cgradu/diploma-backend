@@ -1,5 +1,5 @@
-// Create a new file: prisma/client.js
-const { PrismaClient } = require('@prisma/client');
+// prisma/client.js
+import { PrismaClient } from '@prisma/client';
 
 // Declare global variable for prisma
 let prisma;
@@ -15,4 +15,4 @@ if (process.env.NODE_ENV === 'production') {
   prisma = global.prisma;
 }
 
-module.exports = prisma;
+export { prisma };

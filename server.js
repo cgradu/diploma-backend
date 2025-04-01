@@ -3,27 +3,37 @@
 const PORT = process.env.PORT || 4700;
 
 // Initialize express instance(app)
-const express = require('express');
+import express from 'express';
 // Cors (cross-origin resource sharing) connects the frontend to the backend
-const cors = require('cors');
+import cors from 'cors';
 // Dotenv is used to load environment variables from a .env file into process.env
-require('dotenv').config();
+import dotenv from 'dotenv';
+dotenv.config();
 
 // Prisma is an orm (object relational mapping) used to connect to the database
-const prisma = require('./prisma/client');
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
+
 
 // Import routes
-const authRoutes = require('./routes/authRoutes');
+import authRoutes from './routes/authRoutes.js';
+import charityRoutes from './routes/charityRoutes.js';
 
 // Initialize express app
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:3000', // Or whatever your frontend URL is
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Routes
 app.use('/auth', authRoutes);
+app.use('/charities', charityRoutes);
 
 // Root route
 app.get('/', (req, res) => {

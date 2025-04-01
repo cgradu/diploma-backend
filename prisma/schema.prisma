@@ -1,4 +1,3 @@
-// schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,17 +8,126 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
+  id        Int        @id @default(autoincrement())
+  email     String     @unique
   password  String
-  role      Role     @default(donor)
+  name      String
+  role      Role       @default(donor)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  address   String?
+  phone     String?
+  Charity   Charity[]
+  Donation  Donation[]
+}
+
+model BlockchainVerification {
+  id              Int      @id @default(autoincrement())
+  transactionHash String   @unique
+  blockNumber     Int
+  timestamp       DateTime
+  verified        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  donationId      Int      @unique
+  Donation        Donation @relation(fields: [donationId], references: [id])
+}
+
+model Charity {
+  id             Int              @id @default(autoincrement())
+  name           String
+  description    String           @db.Text
+  mission        String           @db.Text
+  email          String           @unique
+  phone          String?
+  registrationId String           @unique
+  category       Charity_category
+  address        String?
+  foundedYear    Int?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime
+  userId         Int
+  User           User             @relation(fields: [userId], references: [id])
+  CharityUpdate  CharityUpdate[]
+  Donation       Donation[]
+  Project        Project[]
+
+  @@index([category])
+  @@index([userId])
+}
+
+model CharityUpdate {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String   @db.Text
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  charityId Int
+  Charity   Charity  @relation(fields: [charityId], references: [id])
+
+  @@index([charityId])
+}
+
+model Donation {
+  id                     Int                     @id @default(autoincrement())
+  amount                 Float
+  transactionId          String                  @unique
+  message                String?                 @db.Text
+  anonymous              Boolean                 @default(false)
+  createdAt              DateTime                @default(now())
+  donorId                Int
+  charityId              Int
+  projectId              Int?
+  BlockchainVerification BlockchainVerification?
+  Charity                Charity                 @relation(fields: [charityId], references: [id])
+  User                   User                    @relation(fields: [donorId], references: [id])
+  Project                Project?                @relation(fields: [projectId], references: [id])
+
+  @@index([charityId])
+  @@index([donorId])
+  @@index([projectId])
+}
+
+model Project {
+  id            Int            @id @default(autoincrement())
+  title         String
+  description   String         @db.Text
+  goal          Float
+  currentAmount Float          @default(0)
+  startDate     DateTime
+  endDate       DateTime?
+  status        Project_status @default(ACTIVE)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime
+  charityId     Int
+  Donation      Donation[]
+  Charity       Charity        @relation(fields: [charityId], references: [id])
+
+  @@index([charityId])
+  @@index([status])
 }
 
 enum Role {
   donor
   charity
   admin
+}
+
+enum Project_status {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  PAUSED
+}
+
+enum Charity_category {
+  EDUCATION
+  HEALTH
+  ENVIRONMENT
+  HUMANITARIAN
+  ANIMAL_WELFARE
+  ARTS_CULTURE
+  DISASTER_RELIEF
+  HUMAN_RIGHTS
+  COMMUNITY_DEVELOPMENT
+  RELIGIOUS
+  OTHER
 }

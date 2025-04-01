@@ -1,11 +1,11 @@
-const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
 // Register a new user
-exports.register = async (req, res) => {
+export const register = async (req, res) => {
   try {
     // Backend - In the register controller
     console.log('Received registration data:', req.body);
@@ -30,7 +30,7 @@ exports.register = async (req, res) => {
         name,
         email,
         password: hashedPassword,
-        role: role.toLowerCase() || 'donor' // Default to DONOR if not specified
+        role: role?.toLowerCase() || 'donor' // Default to DONOR if not specified
       }
     });
     
@@ -51,7 +51,6 @@ exports.register = async (req, res) => {
       },
       token
     });
-    
   } catch (error) {
     console.error('Registration error:', error);
     return res.status(500).json({ message: 'Server error during registration' });
@@ -59,7 +58,7 @@ exports.register = async (req, res) => {
 };
 
 // Login existing user
-exports.login = async (req, res) => {
+export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
     
@@ -74,7 +73,6 @@ exports.login = async (req, res) => {
     
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    
     if (!isPasswordValid) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -96,7 +94,6 @@ exports.login = async (req, res) => {
       },
       token
     });
-    
   } catch (error) {
     console.error('Login error:', error);
     return res.status(500).json({ message: 'Server error during login' });
@@ -104,7 +101,7 @@ exports.login = async (req, res) => {
 };
 
 // Get current user profile
-exports.getProfile = async (req, res) => {
+export const getProfile = async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id }
@@ -123,9 +120,15 @@ exports.getProfile = async (req, res) => {
         role: user.role
       }
     });
-    
   } catch (error) {
     console.error('Get profile error:', error);
     return res.status(500).json({ message: 'Server error fetching profile' });
   }
+};
+
+// You can group these exports as an object if your routes import them as authController
+export const authController = {
+  register,
+  login,
+  getProfile
 };

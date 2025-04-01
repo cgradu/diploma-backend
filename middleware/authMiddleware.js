@@ -1,7 +1,7 @@
-const jwt = require('jsonwebtoken');
-const prisma = require('../prisma/client'); // Import the singleton client
+import jwt from 'jsonwebtoken';
+import { prisma } from '../prisma/client.js'; // Make sure to include .js extension
 
-exports.authenticate = async (req, res, next) => {
+export const authenticate = async (req, res, next) => {
   try {
     // Get token from header
     console.log(`Auth request to: ${req.method} ${req.originalUrl}`);
@@ -9,7 +9,6 @@ exports.authenticate = async (req, res, next) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ message: 'Authorization denied. No token provided.' });
     }
-    
     const token = authHeader.split(' ')[1];
     
     // Verify token
@@ -52,7 +51,7 @@ exports.authenticate = async (req, res, next) => {
 };
 
 // Create role-based authorization middleware
-exports.authorize = (...roles) => {
+export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
@@ -61,4 +60,10 @@ exports.authorize = (...roles) => {
     }
     next();
   };
+};
+
+// Export as a named object for those importing it as authMiddleware
+export const authMiddleware = {
+  authenticate,
+  authorize
 };
