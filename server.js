@@ -18,22 +18,27 @@ const prisma = new PrismaClient();
 // Import routes
 import authRoutes from './routes/authRoutes.js';
 import charityRoutes from './routes/charityRoutes.js';
+import donationRoutes from './routes/donationRoutes.js';
+import donationController from './controllers/donationController.js';
 
 // Initialize express app
 const app = express();
 
-// Middleware
+app.use('/donations/webhook', express.raw({ type: 'application/json' }), donationController.handleWebhook); // For Stripe webhook
 app.use(cors({
   origin: 'http://localhost:3000', // Or whatever your frontend URL is
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/auth', authRoutes);
 app.use('/charities', charityRoutes);
+app.use('/donations', donationRoutes);
 
 // Root route
 app.get('/', (req, res) => {

@@ -66,21 +66,42 @@ model CharityUpdate {
   @@index([charityId])
 }
 
-model Donation {
-  id                     Int                     @id @default(autoincrement())
-  amount                 Float
-  transactionId          String                  @unique
-  message                String?                 @db.Text
-  anonymous              Boolean                 @default(false)
-  createdAt              DateTime                @default(now())
-  donorId                Int
-  charityId              Int
-  projectId              Int?
-  BlockchainVerification BlockchainVerification?
-  Charity                Charity                 @relation(fields: [charityId], references: [id])
-  User                   User                    @relation(fields: [donorId], references: [id])
-  Project                Project?                @relation(fields: [projectId], references: [id])
+// Add these enum types
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
 
+enum BlockchainStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+// Update the Donation model
+model Donation {
+  id                  Int       @id @default(autoincrement())
+  amount              Float
+  transactionId       String    @unique
+  paymentIntentId     String?   @unique  // Stripe payment intent ID
+  paymentStatus       PaymentStatus @default(PENDING)
+  message             String?   @db.Text
+  anonymous           Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  donorId             Int
+  charityId           Int
+  projectId           Int?
+  currency            String    @default("RON")
+  receiptUrl          String?   // URL to the Stripe receipt
+  
+  BlockchainVerification BlockchainVerification?
+  Charity            Charity  @relation(fields: [charityId], references: [id])
+  User               User     @relation(fields: [donorId], references: [id])
+  Project            Project? @relation(fields: [projectId], references: [id])
+  
   @@index([charityId])
   @@index([donorId])
   @@index([projectId])
