@@ -20,6 +20,7 @@ import authRoutes from './routes/authRoutes.js';
 import charityRoutes from './routes/charityRoutes.js';
 import donationRoutes from './routes/donationRoutes.js';
 import donationController from './controllers/donationController.js';
+import projectRoutes from './routes/projectRoutes.js';
 
 // Initialize express app
 const app = express();
@@ -39,6 +40,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/auth', authRoutes);
 app.use('/charities', charityRoutes);
 app.use('/donations', donationRoutes);
+app.use('/projects', projectRoutes);
 
 // Root route
 app.get('/', (req, res) => {

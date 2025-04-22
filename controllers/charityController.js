@@ -302,8 +302,20 @@ export const updateCharity = async (req, res) => {
 // Get charity categories
 export const getCharityCategories = async (req, res) => {
   try {
-    // Convert enum to array of values
-    const categories = Object.values(prisma.Charity_category);
+    // Define categories based on your schema enum
+    const categories = [
+      'EDUCATION',
+      'HEALTHCARE',
+      'ENVIRONMENT',
+      'HUMANITARIAN',
+      'ANIMAL_WELFARE',
+      'ARTS_CULTURE',
+      'DISASTER_RELIEF',
+      'HUMAN_RIGHTS',
+      'COMMUNITY_DEVELOPMENT',
+      'RELIGIOUS',
+      'OTHER'
+    ];
     
     res.status(200).json({
       success: true,

@@ -141,7 +141,7 @@ enum Project_status {
 
 enum Charity_category {
   EDUCATION
-  HEALTH
+  HEALTHCARE
   ENVIRONMENT
   HUMANITARIAN
   ANIMAL_WELFARE

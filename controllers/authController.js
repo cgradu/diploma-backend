@@ -126,9 +126,65 @@ export const getProfile = async (req, res) => {
   }
 };
 
+export const updateProfile = async (req, res) => {
+  try {
+    const { name, email, phone, address } = req.body;
+    
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Create update data object with only the fields that were provided
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+    if (phone !== undefined) updateData.phone = phone;
+    if (address !== undefined) updateData.address = address;
+    
+    // Only update if there are fields to update
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'No valid fields to update' });
+    }
+    
+    // Update user with only the provided fields
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: updateData
+    });
+    
+    // Return updated user info (without password)
+    return res.status(200).json({
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        phone: updatedUser.phone,
+        address: updatedUser.address
+      }
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    // Log more details about the error
+    if (error.code) {
+      console.error('Error code:', error.code);
+    }
+    if (error.meta) {
+      console.error('Error meta:', error.meta);
+    }
+    return res.status(500).json({ message: 'Server error updating profile' });
+  }
+}
+
 // You can group these exports as an object if your routes import them as authController
 export const authController = {
   register,
   login,
-  getProfile
+  getProfile,
+  updateProfile
 };
