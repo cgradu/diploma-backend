@@ -14,5 +14,7 @@ router.post('/login', authController.login);
 router.get('/profile', authMiddleware.authenticate, authController.getProfile);
 router.put('/profile', authMiddleware.authenticate, authController.updateProfile);
 
+router.put('/password', authMiddleware.authenticate, authController.changePassword);
+
 // Use default export instead of named export
 export default router;

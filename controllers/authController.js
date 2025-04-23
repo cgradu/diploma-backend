@@ -8,7 +8,6 @@ const prisma = new PrismaClient();
 export const register = async (req, res) => {
   try {
     // Backend - In the register controller
-    console.log('Received registration data:', req.body);
     const { name, email, password, role } = req.body;
     
     // Check if user already exists
@@ -117,6 +116,8 @@ export const getProfile = async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
+        address: user.address,
         role: user.role
       }
     });
@@ -144,7 +145,9 @@ export const updateProfile = async (req, res) => {
     if (name !== undefined) updateData.name = name;
     if (email !== undefined) updateData.email = email;
     if (phone !== undefined) updateData.phone = phone;
+    console.log("phone: ", phone);
     if (address !== undefined) updateData.address = address;
+    console.log("address: ", address);
     
     // Only update if there are fields to update
     if (Object.keys(updateData).length === 0) {
@@ -181,10 +184,47 @@ export const updateProfile = async (req, res) => {
   }
 }
 
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Invalid current password' });
+    }
+    
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const hashedNewPassword = await bcrypt.hash(newPassword, salt);
+    
+    // Update password
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { password: hashedNewPassword }
+    });
+    
+    return res.status(200).json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Update password error:', error);
+    return res.status(500).json({ message: 'Server error updating password' });
+  }
+};
+
 // You can group these exports as an object if your routes import them as authController
 export const authController = {
   register,
   login,
   getProfile,
-  updateProfile
+  updateProfile,
+  changePassword
 };
