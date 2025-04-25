@@ -13,7 +13,10 @@ router.post('/confirm-payment', authenticate, donationController.confirmPayment)
 router.get('/history', authenticate, donationController.getDonationHistory);
 router.get('/:id', authenticate, donationController.getDonationDetails);
 
-// Public routes
+// Donation statistics routes
 router.get('/charity/:charityId/stats', donationController.getCharityDonationStats);
+
+// Webhook route (no authentication, relies on Stripe signature)
+router.post('/webhook', express.raw({ type: 'application/json' }), donationController.handleWebhook);
 
 export default router;

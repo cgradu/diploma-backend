@@ -45,7 +45,7 @@ export const getAllProjects = async (req, res) => {
         createdAt: 'desc'
       },
       include: {
-        Charity: {
+        charity: {
           select: {
             id: true,
             name: true,
@@ -54,7 +54,7 @@ export const getAllProjects = async (req, res) => {
         },
         _count: {
           select: {
-            Donation: true
+            donations: true
           }
         }
       }
@@ -67,7 +67,7 @@ export const getAllProjects = async (req, res) => {
     const formattedProjects = projects.map(project => ({
       ...project,
       progressPercentage: Math.min(Math.round((project.currentAmount / project.goal) * 100), 100),
-      donationsCount: project._count.Donation,
+      donationsCount: project._count.donations,
       daysRemaining: project.endDate ? Math.max(0, Math.ceil((new Date(project.endDate) - new Date()) / (1000 * 60 * 60 * 24))) : null
     }));
     
@@ -101,7 +101,7 @@ export const getProjectById = async (req, res) => {
     const project = await prisma.project.findUnique({
       where: { id: Number(id) },
       include: {
-        Charity: {
+        charity: {
           select: {
             id: true,
             name: true,
@@ -111,7 +111,7 @@ export const getProjectById = async (req, res) => {
             phone: true
           }
         },
-        Donation: {
+        donations: {
           take: 10,
           orderBy: { createdAt: 'desc' },
           select: {
@@ -120,12 +120,12 @@ export const getProjectById = async (req, res) => {
             message: true,
             anonymous: true,
             createdAt: true,
-            User: {
+            donor: {
               select: {
                 name: true
               }
             },
-            BlockchainVerification: {
+            blockchainVerification: {
               select: {
                 transactionHash: true,
                 verified: true
@@ -135,7 +135,7 @@ export const getProjectById = async (req, res) => {
         },
         _count: {
           select: {
-            Donation: true
+            donations: true
           }
         }
       }
@@ -157,14 +157,14 @@ export const getProjectById = async (req, res) => {
       : null;
     
     // Format donations for privacy and readability
-    const formattedDonations = project.Donation.map(donation => ({
+    const formattedDonations = project.donations.map(donation => ({
       id: donation.id,
       amount: donation.amount,
       message: donation.message || null,
-      donorName: donation.anonymous ? 'Anonymous Donor' : donation.User.name,
+      donorName: donation.anonymous ? 'Anonymous Donor' : donation.donor.name,
       date: donation.createdAt,
-      verified: donation.BlockchainVerification?.verified || false,
-      transactionHash: donation.BlockchainVerification?.transactionHash || null
+      verified: donation.blockchainVerification?.verified || false,
+      transactionHash: donation.blockchainVerification?.transactionHash || null
     }));
     
     // Prepare response
@@ -172,7 +172,7 @@ export const getProjectById = async (req, res) => {
       ...project,
       progressPercentage,
       daysRemaining,
-      donationsCount: project._count.Donation,
+      donationsCount: project._count.donations,
       recentDonations: formattedDonations
     };
     
@@ -218,7 +218,7 @@ export const createProject = async (req, res) => {
     }
     
     // Check if user is authorized to create projects for this charity
-    if (charity.userId !== userId && req.user.role !== 'admin') {
+    if (charity.managerId !== userId && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to create projects for this charity'
@@ -272,7 +272,7 @@ export const updateProject = async (req, res) => {
     const existingProject = await prisma.project.findUnique({
       where: { id: Number(id) },
       include: {
-        Charity: true
+        charity: true
       }
     });
     
@@ -284,7 +284,7 @@ export const updateProject = async (req, res) => {
     }
     
     // Check if user is charity owner or admin
-    if (existingProject.Charity.userId !== userId && req.user.role !== 'admin') {
+    if (existingProject.charity.managerId !== userId && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to update this project'
@@ -331,7 +331,7 @@ export const deleteProject = async (req, res) => {
     const existingProject = await prisma.project.findUnique({
       where: { id: Number(id) },
       include: {
-        Charity: true
+        charity: true
       }
     });
     
@@ -343,7 +343,7 @@ export const deleteProject = async (req, res) => {
     }
     
     // Check if user is charity owner or admin
-    if (existingProject.Charity.userId !== userId && req.user.role !== 'admin') {
+    if (existingProject.charity.managerId !== userId && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to delete this project'
@@ -450,7 +450,7 @@ export const getProjectsByCharityId = async (req, res) => {
       include: {
         _count: {
           select: {
-            Donation: true
+            donations: true
           }
         }
       }
@@ -460,7 +460,7 @@ export const getProjectsByCharityId = async (req, res) => {
     const formattedProjects = projects.map(project => ({
       ...project,
       progressPercentage: Math.min(Math.round((project.currentAmount / project.goal) * 100), 100),
-      donationsCount: project._count.Donation,
+      donationsCount: project._count.donations,
       daysRemaining: project.endDate ? Math.max(0, Math.ceil((new Date(project.endDate) - new Date()) / (1000 * 60 * 60 * 24))) : null
     }));
     

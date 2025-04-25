@@ -1,3 +1,5 @@
+// Modified schema.prisma with one-to-one charity-manager relationship
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,17 +10,18 @@ datasource db {
 }
 
 model User {
-  id        Int        @id @default(autoincrement())
-  email     String     @unique
-  password  String
-  name      String
-  role      Role       @default(donor)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  address   String?
-  phone     String?
-  Charity   Charity[]
-  Donation  Donation[]
+  id               Int       @id @default(autoincrement())
+  email            String    @unique
+  password         String
+  name             String
+  role             Role      @default(donor)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  address          String?
+  phone            String?
+  
+  donations        Donation[]
+  managedCharity   Charity?  // One user can manage only one charity
 }
 
 model BlockchainVerification {
@@ -29,30 +32,31 @@ model BlockchainVerification {
   verified        Boolean  @default(false)
   createdAt       DateTime @default(now())
   donationId      Int      @unique
-  Donation        Donation @relation(fields: [donationId], references: [id])
+  donation        Donation @relation(fields: [donationId], references: [id])
 }
 
 model Charity {
-  id             Int              @id @default(autoincrement())
-  name           String
-  description    String           @db.Text
-  mission        String           @db.Text
-  email          String           @unique
-  phone          String?
-  registrationId String           @unique
-  category       Charity_category
-  address        String?
-  foundedYear    Int?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime
-  userId         Int
-  User           User             @relation(fields: [userId], references: [id])
-  CharityUpdate  CharityUpdate[]
-  Donation       Donation[]
-  Project        Project[]
+  id               Int              @id @default(autoincrement())
+  name             String
+  description      String           @db.Text
+  mission          String           @db.Text
+  email            String           @unique
+  phone            String?
+  registrationId   String           @unique
+  category         Charity_category
+  address          String?
+  foundedYear      Int?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  
+  managerId        Int              @unique  // One charity has exactly one manager
+  manager          User             @relation(fields: [managerId], references: [id])
+  
+  updates          CharityUpdate[]
+  donations        Donation[]
+  projects         Project[]
 
   @@index([category])
-  @@index([userId])
 }
 
 model CharityUpdate {
@@ -61,12 +65,12 @@ model CharityUpdate {
   content   String   @db.Text
   createdAt DateTime @default(now())
   charityId Int
-  Charity   Charity  @relation(fields: [charityId], references: [id])
+  charity   Charity  @relation(fields: [charityId], references: [id])
 
   @@index([charityId])
 }
 
-// Add these enum types
+// Enums remain the same
 enum PaymentStatus {
   PENDING
   PROCESSING
@@ -81,26 +85,25 @@ enum BlockchainStatus {
   FAILED
 }
 
-// Update the Donation model
 model Donation {
-  id                  Int       @id @default(autoincrement())
-  amount              Float
-  transactionId       String    @unique
-  paymentIntentId     String?   @unique  // Stripe payment intent ID
-  paymentStatus       PaymentStatus @default(PENDING)
-  message             String?   @db.Text
-  anonymous           Boolean   @default(false)
-  createdAt           DateTime  @default(now())
-  donorId             Int
-  charityId           Int
-  projectId           Int?
-  currency            String    @default("RON")
-  receiptUrl          String?   // URL to the Stripe receipt
+  id                     Int                     @id @default(autoincrement())
+  amount                 Float
+  transactionId          String                  @unique
+  paymentIntentId        String?                 @unique  // Stripe payment intent ID
+  paymentStatus          PaymentStatus           @default(PENDING)
+  message                String?                 @db.Text
+  anonymous              Boolean                 @default(false)
+  createdAt              DateTime                @default(now())
+  donorId                Int
+  charityId              Int
+  projectId              Int?
+  currency               String                  @default("RON")
+  receiptUrl             String?                 // URL to the Stripe receipt
   
-  BlockchainVerification BlockchainVerification?
-  Charity            Charity  @relation(fields: [charityId], references: [id])
-  User               User     @relation(fields: [donorId], references: [id])
-  Project            Project? @relation(fields: [projectId], references: [id])
+  blockchainVerification BlockchainVerification?
+  charity                Charity                 @relation(fields: [charityId], references: [id])
+  donor                  User                    @relation(fields: [donorId], references: [id])
+  project                Project?                @relation(fields: [projectId], references: [id])
   
   @@index([charityId])
   @@index([donorId])
@@ -117,10 +120,11 @@ model Project {
   endDate       DateTime?
   status        Project_status @default(ACTIVE)
   createdAt     DateTime       @default(now())
-  updatedAt     DateTime
+  updatedAt     DateTime       @updatedAt
   charityId     Int
-  Donation      Donation[]
-  Charity       Charity        @relation(fields: [charityId], references: [id])
+  
+  donations     Donation[]
+  charity       Charity        @relation(fields: [charityId], references: [id])
 
   @@index([charityId])
   @@index([status])

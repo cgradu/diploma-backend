@@ -38,12 +38,14 @@ export const getAllCharities = async (req, res) => {
       include: {
         _count: {
           select: {
-            Donation: true,
-            Project: true
+            // Use the exact relation names from your schema
+            projects: true,
+            donations: true,
+            updates: true
           }
         },
         // Include some active projects
-        Project: {
+        projects: {
           where: { status: 'ACTIVE' },
           take: 3,
           select: {
@@ -52,6 +54,14 @@ export const getAllCharities = async (req, res) => {
             goal: true,
             currentAmount: true,
             status: true
+          }
+        },
+        // Include user (manager) info
+        manager: {
+          select: {
+            id: true,
+            name: true,
+            email: true
           }
         }
       }
@@ -69,16 +79,21 @@ export const getAllCharities = async (req, res) => {
       address: charity.address || null,
       foundedYear: charity.foundedYear || null,
       createdAt: charity.createdAt,
+      manager: {
+        id: charity.manager.id,
+        name: charity.manager.name,
+        email: charity.manager.email
+      },
       // Add a placeholder logo path - in a real app you'd have proper image handling
       logo: `/uploads/charities/${charity.id}/logo.jpg`,
       verified: true, // Assuming all charities in the system are verified
-      // Add impact metrics from counts
+      // Add impact metrics from counts - using the correct relation names
       impactMetrics: {
-        donationsCount: charity._count.Donation,
-        projectsCount: charity._count.Project,
-        activeProjects: charity.Project.length
+        donationsCount: charity._count.donations,
+        projectsCount: charity._count.projects,
+        updatesCount: charity._count.updates
       },
-      featuredProjects: charity.Project
+      featuredProjects: charity.projects
     }));
     
     res.status(200).json({
@@ -111,32 +126,34 @@ export const getCharityById = async (req, res) => {
     const charity = await prisma.charity.findUnique({
       where: { id: Number(id) },
       include: {
-        Project: {
+        projects: {
           orderBy: { createdAt: 'desc' }
         },
-        CharityUpdate: {
+        updates: {
           orderBy: { createdAt: 'desc' },
           take: 10
         },
-        User: {
+        manager: {
           select: {
             name: true,
-            email: true
+            email: true,
+            phone: true
           }
         },
         _count: {
           select: {
-            Donation: true,
-            Project: true
+            donations: true,
+            projects: true,
+            updates: true
           }
         },
         // Include recent donations for transparency
-        Donation: {
+        donations: {
           take: 10,
           orderBy: { createdAt: 'desc' },
           include: {
-            BlockchainVerification: true,
-            Project: {
+            blockchainVerification: true,
+            project: {
               select: {
                 id: true,
                 title: true
@@ -154,16 +171,45 @@ export const getCharityById = async (req, res) => {
       });
     }
     
-    // Add placeholder logo URL
-    const charityWithLogo = {
-      ...charity,
+    // Add placeholder logo URL and format the response
+    const formattedCharity = {
+      id: charity.id,
+      name: charity.name,
+      description: charity.description,
+      mission: charity.mission,
+      email: charity.email,
+      phone: charity.phone,
+      registrationId: charity.registrationId,
+      category: charity.category,
+      address: charity.address,
+      foundedYear: charity.foundedYear,
+      createdAt: charity.createdAt,
+      updatedAt: charity.updatedAt,
+      manager: charity.manager,
       logo: `/uploads/charities/${charity.id}/logo.jpg`,
-      verified: true // Assuming all charities in the system are verified
+      verified: true, // Assuming all charities in the system are verified
+      projects: charity.projects,
+      updates: charity.updates,
+      recentDonations: charity.donations.map(donation => ({
+        id: donation.id,
+        amount: donation.amount,
+        currency: donation.currency,
+        createdAt: donation.createdAt,
+        anonymous: donation.anonymous,
+        verified: donation.blockchainVerification?.verified || false,
+        project: donation.project,
+        transactionHash: donation.blockchainVerification?.transactionHash || null
+      })),
+      stats: {
+        donationsCount: charity._count.donations,
+        projectsCount: charity._count.projects,
+        updatesCount: charity._count.updates
+      }
     };
     
     res.status(200).json({
       success: true,
-      data: charityWithLogo
+      data: formattedCharity
     });
   } catch (error) {
     console.error('Error retrieving charity:', error);
@@ -193,6 +239,18 @@ export const createCharity = async (req, res) => {
     // Extract user ID from authenticated user
     const userId = req.user.id;
     
+    // Check if user already manages a charity
+    const existingCharity = await prisma.charity.findUnique({
+      where: { managerId: userId }
+    });
+    
+    if (existingCharity) {
+      return res.status(400).json({
+        success: false,
+        message: 'This user already manages a charity. One user can only manage one charity.'
+      });
+    }
+    
     // Create charity
     const charity = await prisma.charity.create({
       data: {
@@ -205,10 +263,18 @@ export const createCharity = async (req, res) => {
         category,
         address,
         foundedYear: foundedYear ? Number(foundedYear) : null,
-        userId,
+        managerId: userId, // Associate with user as manager
         updatedAt: new Date() // Set initial updatedAt
       }
     });
+    
+    // Update user role to charity if not already
+    if (req.user.role !== 'charity') {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { role: 'charity' }
+      });
+    }
     
     res.status(201).json({
       success: true,
@@ -250,7 +316,7 @@ export const updateCharity = async (req, res) => {
     // Extract user ID from authenticated user
     const userId = req.user.id;
     
-    // Check if charity exists and belongs to the user
+    // Check if charity exists
     const existingCharity = await prisma.charity.findUnique({
       where: { id: Number(id) }
     });
@@ -262,8 +328,8 @@ export const updateCharity = async (req, res) => {
       });
     }
     
-    // Check if user is owner or admin
-    if (existingCharity.userId !== userId && req.user.role !== 'admin') {
+    // Check if user is the charity manager or an admin
+    if (existingCharity.managerId !== userId && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to update this charity'
@@ -326,6 +392,81 @@ export const getCharityCategories = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error retrieving charity categories',
+      error: error.message
+    });
+  }
+};
+
+// Get charity managed by the logged-in user
+export const getCharityByManager = async (req, res) => {
+  try {
+    // Extract user ID from authenticated user
+    const userId = req.user.id;
+    
+    // Make sure we're using the correct data type for managerId (Int)
+    const userIdInt = parseInt(userId, 10);
+    
+    console.log('Looking for charity with managerId:', userIdInt);
+    
+    // Find charity where the managerId matches the user's ID
+    const charity = await prisma.charity.findUnique({
+      where: { managerId: userIdInt },
+      include: {
+        projects: {
+          take: 3,
+          orderBy: { createdAt: 'desc' },
+          where: { status: 'ACTIVE' }
+        },
+        _count: {
+          select: {
+            donations: true,
+            projects: true,
+            updates: true
+          }
+        }
+      }
+    });
+    
+    if (!charity) {
+      return res.status(404).json({
+        success: false,
+        message: 'No charity found for this manager'
+      });
+    }
+    
+    // Format response
+    const formattedCharity = {
+      id: charity.id,
+      name: charity.name,
+      description: charity.description,
+      mission: charity.mission,
+      email: charity.email,
+      phone: charity.phone,
+      registrationId: charity.registrationId,
+      category: charity.category,
+      address: charity.address,
+      foundedYear: charity.foundedYear,
+      createdAt: charity.createdAt,
+      updatedAt: charity.updatedAt,
+      managerId: charity.managerId,
+      featuredProjects: charity.projects,
+      stats: {
+        donationsCount: charity._count.donations,
+        projectsCount: charity._count.projects,
+        updatesCount: charity._count.updates
+      }
+    };
+    
+    res.status(200).json({
+      success: true,
+      data: formattedCharity
+    });
+  } catch (error) {
+    console.error('Error retrieving manager charity:', error);
+    console.error('Error details:', error.stack);
+    res.status(500).json({
+      success: false,
+      message: 'Error retrieving manager charity',
       error: error.message
     });
   }

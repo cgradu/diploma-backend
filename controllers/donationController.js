@@ -251,7 +251,7 @@ const getDonationDetails = async (req, res) => {
   }
 };
 
-// Get charity donation statistics
+// Enhanced charity donation statistics for the dashboard
 const getCharityDonationStats = async (req, res) => {
   try {
     const { charityId } = req.params;
@@ -277,6 +277,67 @@ const getCharityDonationStats = async (req, res) => {
       _count: true
     });
     
+    // Count unique donors
+    const uniqueDonors = await prisma.donation.groupBy({
+      by: ['donorId'],
+      where: {
+        charityId: parseInt(charityId),
+        paymentStatus: 'SUCCEEDED',
+        donorId: { not: null }
+      },
+      _count: true
+    });
+    
+    // Add count of anonymous donations
+    const anonymousDonations = await prisma.donation.count({
+      where: {
+        charityId: parseInt(charityId),
+        paymentStatus: 'SUCCEEDED',
+        anonymous: true
+      }
+    });
+    
+    // Count by month for trend analysis
+    const monthlyDonations = await prisma.donation.groupBy({
+      by: ['createdAt'],
+      where: {
+        charityId: parseInt(charityId),
+        paymentStatus: 'SUCCEEDED'
+      },
+      _sum: {
+        amount: true
+      },
+      _count: true
+    });
+    
+    // Format monthly data for easier frontend consumption
+    const monthlyTrend = monthlyDonations.map(item => ({
+      month: new Date(item.createdAt).toISOString().substring(0, 7), // YYYY-MM format
+      total: item._sum.amount,
+      count: item._count
+    }));
+    
+    // Group by month and year
+    const monthlyData = {};
+    
+    monthlyTrend.forEach(item => {
+      if (!monthlyData[item.month]) {
+        monthlyData[item.month] = {
+          total: 0,
+          count: 0
+        };
+      }
+      monthlyData[item.month].total += item.total;
+      monthlyData[item.month].count += item.count;
+    });
+    
+    // Convert to array format for easier frontend processing
+    const trendData = Object.keys(monthlyData).map(month => ({
+      month,
+      total: monthlyData[month].total,
+      count: monthlyData[month].count
+    }));
+    
     // Get projects with donation statistics
     const projects = await prisma.project.findMany({
       where: {
@@ -300,39 +361,20 @@ const getCharityDonationStats = async (req, res) => {
       }
     });
     
-    // Get recent donations
-    const recentDonations = await prisma.donation.findMany({
-      where: {
-        charityId: parseInt(charityId),
-        paymentStatus: 'SUCCEEDED',
-        anonymous: false
-      },
-      select: {
-        id: true,
-        amount: true,
-        createdAt: true,
-        User: {
-          select: {
-            name: true
-          }
-        },
-        Project: {
-          select: {
-            title: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      take: 5
-    });
-    
     return res.status(200).json({
       totalAmount: totalDonations._sum.amount || 0,
       totalDonations: totalDonations._count,
-      projects,
-      recentDonations
+      uniqueDonors: uniqueDonors.length + anonymousDonations, // Count unique users plus anonymous donations
+      projects: projects.map(project => ({
+        id: project.id,
+        title: project.title,
+        goal: project.goal,
+        currentAmount: project.currentAmount,
+        status: project.status,
+        donationCount: project._count.Donation,
+        percentFunded: project.goal > 0 ? Math.round((project.currentAmount / project.goal) * 100) : 0
+      })),
+      trendData: trendData.sort((a, b) => a.month.localeCompare(b.month)) // Sort by date
     });
     
   } catch (error) {
