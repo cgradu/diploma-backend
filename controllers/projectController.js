@@ -421,7 +421,6 @@ export const getProjectStatuses = async (req, res) => {
 export const getProjectsByCharityId = async (req, res) => {
   try {
     const { charityId } = req.params;
-    console.log('Charity ID:', charityId);
     // Validate charityId
     if (!charityId || isNaN(charityId)) {
       return res.status(400).json({
@@ -429,18 +428,12 @@ export const getProjectsByCharityId = async (req, res) => {
         message: 'Invalid charity ID'
       });
     }
-    const { status } = req.query;
-    console.log('Status filter:', status);
+
     
     // Build filter object
     const where = {
       charityId: Number(charityId)
     };
-    
-    // Add status filter if provided
-    if (status && status !== 'All') {
-      where.status = status;
-    }
     
     const projects = await prisma.project.findMany({
       where,

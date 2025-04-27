@@ -17,8 +17,8 @@ const router = express.Router();
 // Public routes - specific routes first, then parameterized routes
 router.get('/', getAllProjects);
 router.get('/statuses', getProjectStatuses);
-router.get('/charity/:charityId', getProjectsByCharityId); // projects/charity/:charityId
 router.get('/:id', getProjectById); // This should come after other specific routes
+router.get('/charity/:charityId', getProjectsByCharityId); // projects/charity/:charityId
 
 // Protected routes (require authentication)
 router.use(authenticate);
