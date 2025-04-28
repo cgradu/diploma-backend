@@ -428,7 +428,6 @@ export const getProjectsByCharityId = async (req, res) => {
         message: 'Invalid charity ID'
       });
     }
-
     
     // Build filter object
     const where = {

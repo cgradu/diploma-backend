@@ -6,8 +6,7 @@ const prisma = new PrismaClient();
 export const getAllCharities = async (req, res) => {
   try {
     console.log('GET /charities received with query:', req.query);
-    const { page = 1, limit = 10, category, search } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
+    const { page, limit, category, search, all } = req.query;
     
     // Build filter object
     const where = {};
@@ -27,18 +26,25 @@ export const getAllCharities = async (req, res) => {
       ];
     }
     
-    // Get charities with pagination and related counts
+    // Determine if we should paginate or return all results
+    const shouldPaginate = !all && page && limit;
+    
+    // Set up pagination options if needed
+    const paginationOptions = shouldPaginate ? {
+      skip: (Number(page) - 1) * Number(limit),
+      take: Number(limit)
+    } : {};
+    
+    // Get charities with or without pagination
     const charities = await prisma.charity.findMany({
       where,
-      skip,
-      take: Number(limit),
+      ...paginationOptions,
       orderBy: {
         createdAt: 'desc'
       },
       include: {
         _count: {
           select: {
-            // Use the exact relation names from your schema
             projects: true,
             donations: true,
             updates: true
@@ -96,16 +102,21 @@ export const getAllCharities = async (req, res) => {
       featuredProjects: charity.projects
     }));
     
+    // Format pagination info
+    const paginationInfo = shouldPaginate ? {
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit))
+      }
+    } : { total };
+    
     res.status(200).json({
       success: true,
       data: {
         charities: formattedCharities,
-        pagination: {
-          total,
-          page: Number(page),
-          limit: Number(limit),
-          totalPages: Math.ceil(total / Number(limit))
-        }
+        ...paginationInfo
       }
     });
   } catch (error) {
