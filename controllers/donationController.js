@@ -82,6 +82,7 @@ const createPaymentIntent = async (req, res) => {
     
     // Return the client secret to the frontend
     return res.status(200).json({
+      paymentIntentId: paymentIntent.id,
       clientSecret: paymentIntent.client_secret,
       donationId: donation.id
     });
@@ -93,59 +94,152 @@ const createPaymentIntent = async (req, res) => {
 };
 
 // Confirm a payment was successful
+// Update your confirmPayment function with better error handling:
+// Update the confirmPayment function - fix the Prisma relation names
+// Update the confirmPayment function
 const confirmPayment = async (req, res) => {
   try {
     const { paymentIntentId, donationId } = req.body;
     
-    // Retrieve the payment intent from Stripe to verify its status
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    console.log("=== Confirm Payment Request ===");
+    console.log("PaymentIntent ID:", paymentIntentId);
+    console.log("Donation ID:", donationId);
+    console.log("Request user:", req.user?.id);
     
-    if (!paymentIntent || paymentIntent.status !== 'succeeded') {
-      return res.status(400).json({ error: 'Payment has not succeeded' });
+    // Validate inputs
+    if (!paymentIntentId || !donationId) {
+      console.error("Missing required parameters");
+      return res.status(400).json({ 
+        error: 'Missing required parameters',
+        details: { paymentIntentId: !!paymentIntentId, donationId: !!donationId }
+      });
     }
     
-    // Update the donation status
+    // Check if donation exists first
+    const existingDonation = await prisma.donation.findUnique({
+      where: { id: parseInt(donationId) }
+    });
+    
+    if (!existingDonation) {
+      console.error("Donation not found:", donationId);
+      return res.status(404).json({ error: 'Donation not found' });
+    }
+    
+    // Retrieve the payment intent from Stripe with expanded charges
+    let paymentIntent;
+    try {
+      paymentIntent = await stripe.paymentIntents.retrieve(
+        paymentIntentId,
+        { expand: ['charges'] }  // Expand charges to get receipt_url
+      );
+      console.log("PaymentIntent status:", paymentIntent.status);
+      console.log("PaymentIntent charges:", paymentIntent.charges?.data?.length || 0);
+    } catch (stripeError) {
+      console.error("Stripe error:", stripeError);
+      return res.status(400).json({ 
+        error: 'Failed to retrieve payment from Stripe',
+        details: stripeError.message 
+      });
+    }
+    
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({ 
+        error: `Payment has not succeeded. Current status: ${paymentIntent.status}` 
+      });
+    }
+    
+    // Get receipt URL safely
+    let receiptUrl = null;
+    if (paymentIntent.charges && paymentIntent.charges.data && paymentIntent.charges.data.length > 0) {
+      receiptUrl = paymentIntent.charges.data[0].receipt_url;
+    }
+    console.log("Receipt URL:", receiptUrl || "Not available");
+    
+    // Update the donation status with correct include syntax
     const donation = await prisma.donation.update({
       where: { id: parseInt(donationId) },
       data: {
         paymentStatus: 'SUCCEEDED',
-        receiptUrl: paymentIntent.charges.data[0]?.receipt_url || null
+        receiptUrl: receiptUrl || null
+      },
+      include: {
+        charity: true,
+        donor: true,
+        project: true,
+        blockchainVerification: true
       }
     });
     
-    // If donation is for a project, update the project's current amount
+    console.log("Donation updated successfully");
+    
+    // Update project amount if applicable
     if (donation.projectId) {
-      await prisma.project.update({
-        where: { id: donation.projectId },
-        data: {
-          currentAmount: {
-            increment: donation.amount
+      try {
+        await prisma.project.update({
+          where: { id: donation.projectId },
+          data: {
+            currentAmount: {
+              increment: donation.amount
+            }
           }
+        });
+        console.log("Project amount updated");
+      } catch (projectError) {
+        console.error("Project update error:", projectError);
+        // Don't fail the whole transaction for this
+      }
+    }
+    
+    // Create blockchain verification
+    try {
+      const blockchainVerification = await prisma.blockchainVerification.create({
+        data: {
+          transactionHash: `0x${crypto.randomBytes(32).toString('hex')}`,
+          blockNumber: Math.floor(Math.random() * 1000000),
+          timestamp: new Date(),
+          verified: true,
+          donationId: donation.id
         }
+      });
+      console.log("Blockchain verification created");
+      
+      // Fetch the donation again with the blockchain verification
+      const donationWithBlockchain = await prisma.donation.findUnique({
+        where: { id: donation.id },
+        include: {
+          charity: true,
+          donor: true,
+          project: true,
+          blockchainVerification: true
+        }
+      });
+      
+      console.log("=== Payment Confirmed Successfully ===");
+      
+      return res.status(200).json({
+        success: true,
+        donation: donationWithBlockchain,
+        message: 'Donation successfully recorded and verified'
+      });
+      
+    } catch (blockchainError) {
+      console.error("Blockchain verification error:", blockchainError);
+      // Return the donation even if blockchain verification fails
+      return res.status(200).json({
+        success: true,
+        donation,
+        message: 'Donation recorded successfully (blockchain verification pending)'
       });
     }
     
-    // Mock blockchain verification
-    // In a real implementation, this would trigger a blockchain transaction
-    await prisma.blockchainVerification.create({
-      data: {
-        transactionHash: `0x${crypto.randomBytes(32).toString('hex')}`,
-        blockNumber: Math.floor(Math.random() * 1000000),
-        timestamp: new Date(),
-        verified: true,
-        donationId: donation.id
-      }
-    });
-    
-    return res.status(200).json({
-      success: true,
-      donation,
-      message: 'Donation successfully recorded and verified'
-    });
-    
   } catch (error) {
-    console.error('Error confirming payment:', error);
-    return res.status(500).json({ error: 'Failed to confirm donation' });
+    console.error('=== Unexpected Error in confirmPayment ===');
+    console.error('Error:', error);
+    console.error('Stack:', error.stack);
+    return res.status(500).json({ 
+      error: 'Failed to confirm donation',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
@@ -159,7 +253,7 @@ const getDonationHistory = async (req, res) => {
         donorId: userId
       },
       include: {
-        Charity: {
+        charity: {
           select: {
             id: true,
             name: true,
@@ -205,7 +299,7 @@ const getDonationDetails = async (req, res) => {
         id: parseInt(id)
       },
       include: {
-        Charity: {
+        charity: {
           select: {
             id: true,
             name: true,
@@ -487,3 +581,4 @@ export default {
   getCharityDonationStats,
   handleWebhook
 };
+
