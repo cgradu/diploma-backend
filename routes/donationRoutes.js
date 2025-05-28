@@ -19,4 +19,9 @@ router.get('/charity/:charityId/stats', donationController.getCharityDonationSta
 // Webhook route (no authentication, relies on Stripe signature)
 router.post('/webhook', express.raw({ type: 'application/json' }), donationController.handleWebhook);
 
+// In donationRoutes.js
+router.get('/:id/verification', authMiddleware.protect, donationController.getVerificationStatus);
+router.post('/:id/verify', authMiddleware.protect, donationController.verifyDonationOnBlockchain);
+router.get('/blockchain/stats', authMiddleware.protect, authMiddleware.restrictTo('admin'), donationController.getBlockchainStats);
+
 export default router;

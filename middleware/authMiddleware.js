@@ -1,7 +1,6 @@
+// backend/middleware/authMiddleware.js
 import jwt from 'jsonwebtoken';
-import { prisma } from '../prisma/client.js'; // Make sure to include .js extension
-
-
+import { prisma } from '../prisma/client.js';
 
 export const authenticate = async (req, res, next) => {
   try {
@@ -64,8 +63,18 @@ export const authorize = (...roles) => {
   };
 };
 
+// For backward compatibility, add protect as an alias for authenticate
+export const protect = authenticate;
+
+// Add the restrictTo function as an alias for authorize for compatibility
+export const restrictTo = (...roles) => authorize(...roles);
+
 // Export as a named object for those importing it as authMiddleware
 export const authMiddleware = {
   authenticate,
-  authorize
+  authorize,
+  protect,
+  restrictTo
 };
+
+export default authMiddleware;

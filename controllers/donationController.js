@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import Stripe from 'stripe';
 import crypto from 'crypto';
+import blockchainService from '../services/blockchainService.js'; // Add this import
+import blockchainVerificationService from '../services/blockchainVerificationService.js';
 
 const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -93,10 +95,8 @@ const createPaymentIntent = async (req, res) => {
   }
 };
 
-// Confirm a payment was successful
-// Update your confirmPayment function with better error handling:
-// Update the confirmPayment function - fix the Prisma relation names
-// Update the confirmPayment function
+// confirmPayment function
+// confirmPayment function - Updated with proper blockchain integration
 const confirmPayment = async (req, res) => {
   try {
     const { paymentIntentId, donationId } = req.body;
@@ -124,6 +124,8 @@ const confirmPayment = async (req, res) => {
       console.error("Donation not found:", donationId);
       return res.status(404).json({ error: 'Donation not found' });
     }
+    
+    console.log("Found donation:", existingDonation);
     
     // Retrieve the payment intent from Stripe with expanded charges
     let paymentIntent;
@@ -190,52 +192,97 @@ const confirmPayment = async (req, res) => {
       }
     }
     
-    // Create blockchain verification
+    // Create blockchain verification - UPDATED SECTION
+    let blockchainVerification = null;
     try {
-      const blockchainVerification = await prisma.blockchainVerification.create({
-        data: {
-          transactionHash: `0x${crypto.randomBytes(32).toString('hex')}`,
-          blockNumber: Math.floor(Math.random() * 1000000),
-          timestamp: new Date(),
-          verified: true,
-          donationId: donation.id
-        }
-      });
-      console.log("Blockchain verification created");
+      // Use blockchainVerificationService to verify the donation on blockchain
+      console.log("Recording donation on blockchain via verification service...");
+      blockchainVerification = await blockchainVerificationService.verifyDonation(donation.id);
       
-      // Fetch the donation again with the blockchain verification
-      const donationWithBlockchain = await prisma.donation.findUnique({
-        where: { id: donation.id },
-        include: {
-          charity: true,
-          donor: true,
-          project: true,
-          blockchainVerification: true
-        }
-      });
-      
-      console.log("=== Payment Confirmed Successfully ===");
-      
-      return res.status(200).json({
-        success: true,
-        donation: donationWithBlockchain,
-        message: 'Donation successfully recorded and verified'
-      });
-      
+      console.log("Blockchain verification successful:", blockchainVerification);
     } catch (blockchainError) {
       console.error("Blockchain verification error:", blockchainError);
-      // Return the donation even if blockchain verification fails
-      return res.status(200).json({
-        success: true,
-        donation,
-        message: 'Donation recorded successfully (blockchain verification pending)'
-      });
+      
+      // Create pending verification record
+      try {
+        blockchainVerification = await prisma.blockchainVerification.create({
+          data: {
+            transactionHash: `pending_${crypto.randomBytes(16).toString('hex')}`,
+            blockNumber: 0,
+            timestamp: new Date(),
+            verified: false,
+            donationId: donation.id
+          }
+        });
+        console.log("Created pending blockchain verification");
+      } catch (dbError) {
+        console.error("Failed to create pending verification:", dbError);
+      }
     }
+    
+    // Fetch the complete donation with all relationships including blockchain verification
+    const finalDonation = await prisma.donation.findUnique({
+      where: { id: donation.id },
+      include: {
+        charity: {
+          select: {
+            id: true,
+            name: true,
+            category: true,
+            description: true
+          }
+        },
+        donor: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        project: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            goal: true,
+            currentAmount: true,
+            status: true
+          }
+        },
+        blockchainVerification: true
+      }
+    });
+    
+    console.log("=== Payment Confirmed Successfully ===");
+    console.log("Final donation data:", {
+      id: finalDonation.id,
+      amount: finalDonation.amount,
+      currency: finalDonation.currency,
+      blockchainVerified: finalDonation.blockchainVerification?.verified || false
+    });
+    
+    return res.status(200).json({
+      success: true,
+      donation: finalDonation,
+      message: finalDonation.blockchainVerification?.verified 
+        ? 'Donation successfully recorded and verified on blockchain'
+        : 'Donation recorded successfully (blockchain verification pending)'
+    });
     
   } catch (error) {
     console.error('=== Unexpected Error in confirmPayment ===');
-    console.error('Error:', error);
-    console.error('Stack:', error.stack);
+    console.error('Error type:', error.constructor.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    // Log Prisma-specific errors
+    if (error.code) {
+      console.error('Error code:', error.code);
+    }
+    if (error.meta) {
+      console.error('Error meta:', error.meta);
+    }
+    
     return res.status(500).json({ 
       error: 'Failed to confirm donation',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -573,12 +620,175 @@ const handleWebhook = async (req, res) => {
   }
 };
 
+// Get blockchain donations by charity
+const getBlockchainDonationsByCharity = async (req, res) => {
+  try {
+    const { charityId } = req.params;
+    const donations = await blockchainService.getDonationsByCharity(charityId);
+    res.json(donations);
+  } catch (error) {
+    console.error('Error fetching blockchain donations:', error);
+    res.status(500).json({ error: 'Failed to fetch blockchain data' });
+  }
+};
+
+// Get blockchain donations by donor
+const getBlockchainDonationsByDonor = async (req, res) => {
+  try {
+    const { donorId } = req.params;
+    const donations = await blockchainService.getDonationsByDonor(donorId);
+    res.json(donations);
+  } catch (error) {
+    console.error('Error fetching blockchain donations:', error);
+    res.status(500).json({ error: 'Failed to fetch blockchain data' });
+  }
+};
+
+// Get charity flow data
+const getCharityFlowData = async (req, res) => {
+  try {
+    const { charityId } = req.params;
+    const flowData = await blockchainService.getCharityFlow(charityId);
+    res.json(flowData);
+  } catch (error) {
+    console.error('Error fetching charity flow:', error);
+    res.status(500).json({ error: 'Failed to fetch flow data' });
+  }
+};
+
+// Get verification status
+const getVerificationStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const verification = await blockchainVerificationService.getVerificationStatus(parseInt(id));
+    return res.status(200).json(verification);
+  } catch (error) {
+    console.error('Error getting verification status:', error);
+    return res.status(500).json({ error: 'Failed to get verification status' });
+  }
+};
+
+// Verify donation on blockchain
+const verifyDonationOnBlockchain = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const donationId = parseInt(id);
+    
+    // Check if admin or donation owner
+    const donation = await prisma.donation.findUnique({
+      where: { id: donationId },
+      include: { blockchainVerification: true }
+    });
+    
+    if (!donation) {
+      return res.status(404).json({ error: 'Donation not found' });
+    }
+    
+    // Only admin or the donor can manually verify
+    if (donation.donorId !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Not authorized to verify this donation' });
+    }
+    
+    // Check if already verified
+    if (donation.blockchainVerification?.verified) {
+      return res.status(200).json({ 
+        message: 'Donation already verified on blockchain',
+        verification: donation.blockchainVerification
+      });
+    }
+    
+    // Perform blockchain verification
+    const verification = await blockchainVerificationService.verifyDonation(donationId);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Donation successfully verified on blockchain',
+      verification: verification
+    });
+    
+  } catch (error) {
+    console.error('Error verifying donation on blockchain:', error);
+    return res.status(500).json({ 
+      error: 'Failed to verify donation on blockchain',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Get blockchain statistics
+const getBlockchainStats = async (req, res) => {
+  try {
+    // Ensure admin access
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only administrators can access blockchain statistics' });
+    }
+    
+    // Get global blockchain stats
+    const verifiedCount = await prisma.blockchainVerification.count({
+      where: { verified: true }
+    });
+    
+    const pendingCount = await prisma.blockchainVerification.count({
+      where: { verified: false }
+    });
+    
+    const totalDonations = await prisma.donation.count({
+      where: { paymentStatus: 'SUCCEEDED' }
+    });
+    
+    // Get recent verifications
+    const recentVerifications = await prisma.blockchainVerification.findMany({
+      where: { verified: true },
+      orderBy: { timestamp: 'desc' },
+      take: 10,
+      include: {
+        donation: {
+          include: {
+            charity: {
+              select: {
+                name: true
+              }
+            }
+          }
+        }
+      }
+    });
+    
+    return res.status(200).json({
+      verifiedCount,
+      pendingCount,
+      totalDonations,
+      verificationRate: totalDonations > 0 ? (verifiedCount / totalDonations) * 100 : 0,
+      recentVerifications: recentVerifications.map(v => ({
+        id: v.id,
+        donationId: v.donationId,
+        transactionHash: v.transactionHash,
+        blockNumber: v.blockNumber,
+        timestamp: v.timestamp,
+        amount: v.donation?.amount || 0,
+        currency: v.donation?.currency || 'USD',
+        charityName: v.donation?.charity?.name || 'Unknown Charity'
+      }))
+    });
+  } catch (error) {
+    console.error('Error getting blockchain stats:', error);
+    return res.status(500).json({ error: 'Failed to retrieve blockchain statistics' });
+  }
+};
+
+// Don't forget to add these to your export
 export default {
   createPaymentIntent,
   confirmPayment,
   getDonationHistory,
   getDonationDetails,
   getCharityDonationStats,
-  handleWebhook
+  handleWebhook,
+  getBlockchainDonationsByCharity,
+  getBlockchainDonationsByDonor,
+  getCharityFlowData,
+  getVerificationStatus,
+  verifyDonationOnBlockchain,
+  getBlockchainStats
 };
 
