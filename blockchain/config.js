@@ -5,8 +5,7 @@ import { CONTRACT_ABI } from './contractABI.js';
 
 dotenv.config();
 
-const NETWORK = process.env.BLOCKCHAIN_NETWORK || 'sepolia';
-// console.log(process.env.INFURA_API_KEY)
+const NETWORK = process.env.BLOCKCHAIN_NETWORK;
 
 // Network configurations
 const networks = {
@@ -21,7 +20,7 @@ const networks = {
     name: 'Sepolia Testnet'
   },
   mainnet: {
-    url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
+    url: `https://mainnet.infura.io/v3/416d976e9cf04600a91b11bb9e07290d`,
     chainId: 1,
     name: 'Ethereum Mainnet'
   }
@@ -133,12 +132,13 @@ export const getProvider = async (retries = 3) => {
   }
 };
 
-// Enhanced wallet creation
 export const getWallet = async () => {
   const provider = await getProvider();
   
   try {
-    const privateKey = process.env.BLOCKCHAIN_PRIVATE_KEY;
+    // Make sure the private key is properly formatted
+    let privateKey = process.env.BLOCKCHAIN_PRIVATE_KEY;
+    
     const wallet = new ethers.Wallet(privateKey, provider);
     
     console.log(`💼 Wallet address: ${wallet.address}`);
@@ -148,11 +148,7 @@ export const getWallet = async () => {
     const balanceInEth = ethers.formatEther(balance);
     console.log(`💰 Wallet balance: ${balanceInEth} ETH`);
     
-    if (parseFloat(balanceInEth) === 0) {
-      console.warn('⚠️  Wallet balance is 0 - you might need test ETH for transactions');
-    }
-    
-    return wallet;
+    return wallet; // This should be a wallet, not a provider
   } catch (error) {
     throw new Error(`Failed to create wallet: ${error.message}`);
   }

@@ -49,25 +49,13 @@ model Charity {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   
-  managerId        Int              @unique  // One charity has exactly one manager
+  managerId        Int            @unique  // One charity has exactly one manager
   manager          User             @relation(fields: [managerId], references: [id])
   
-  updates          CharityUpdate[]
   donations        Donation[]
   projects         Project[]
 
   @@index([category])
-}
-
-model CharityUpdate {
-  id        Int      @id @default(autoincrement())
-  title     String
-  content   String   @db.Text
-  createdAt DateTime @default(now())
-  charityId Int
-  charity   Charity  @relation(fields: [charityId], references: [id])
-
-  @@index([charityId])
 }
 
 // Enums remain the same

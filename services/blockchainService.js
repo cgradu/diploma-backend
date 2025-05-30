@@ -22,12 +22,6 @@ class BlockchainService {
 
   async recordDonation(donation) {
     try {
-      // If initialization failed, use mock functionality
-      if (this.useMock) {
-        console.log('Using mock blockchain service for recordDonation:', donation);
-        return this._mockRecordDonation(donation);
-      }
-
       console.log('Recording donation on blockchain:', donation);
       
       // Convert amount to wei (assuming 18 decimals)
@@ -112,39 +106,6 @@ class BlockchainService {
       console.error('Error getting charity flow:', error);
       return this._mockGetCharityFlow(charityId);
     }
-  }
-
-  // Mock implementations for fallback
-  _mockRecordDonation(donation) {
-    console.log('MOCK: Recording donation:', donation);
-    
-    // Generate mock data
-    const transactionHash = `0x${Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('')}`;
-    const blockNumber = Math.floor(Math.random() * 1000000);
-    
-    return {
-      transactionHash,
-      blockNumber,
-      gasUsed: '21000'
-    };
-  }
-
-  _mockGetDonationsByCharity(charityId) {
-    console.log('MOCK: Getting donations for charity:', charityId);
-    
-    // Return an empty array for mock implementation
-    return [];
-  }
-
-  _mockGetCharityFlow(charityId) {
-    console.log('MOCK: Getting charity flow for:', charityId);
-    
-    return {
-      totalReceived: '0',
-      totalDisbursed: '0',
-      adminFees: '0',
-      balance: '0'
-    };
   }
 }
 

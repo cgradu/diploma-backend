@@ -46,8 +46,7 @@ export const getAllCharities = async (req, res) => {
         _count: {
           select: {
             projects: true,
-            donations: true,
-            updates: true
+            donations: true
           }
         },
         // Include some active projects
@@ -96,8 +95,7 @@ export const getAllCharities = async (req, res) => {
       // Add impact metrics from counts - using the correct relation names
       impactMetrics: {
         donationsCount: charity._count.donations,
-        projectsCount: charity._count.projects,
-        updatesCount: charity._count.updates
+        projectsCount: charity._count.projects
       },
       featuredProjects: charity.projects
     }));
@@ -140,10 +138,6 @@ export const getCharityById = async (req, res) => {
         projects: {
           orderBy: { createdAt: 'desc' }
         },
-        updates: {
-          orderBy: { createdAt: 'desc' },
-          take: 10
-        },
         manager: {
           select: {
             name: true,
@@ -154,8 +148,7 @@ export const getCharityById = async (req, res) => {
         _count: {
           select: {
             donations: true,
-            projects: true,
-            updates: true
+            projects: true
           }
         },
         // Include recent donations for transparency
@@ -198,9 +191,8 @@ export const getCharityById = async (req, res) => {
       updatedAt: charity.updatedAt,
       manager: charity.manager,
       logo: `/uploads/charities/${charity.id}/logo.jpg`,
-      verified: true, // Assuming all charities in the system are verified
+      verified: true, 
       projects: charity.projects,
-      updates: charity.updates,
       recentDonations: charity.donations.map(donation => ({
         id: donation.id,
         amount: donation.amount,
@@ -213,8 +205,7 @@ export const getCharityById = async (req, res) => {
       })),
       stats: {
         donationsCount: charity._count.donations,
-        projectsCount: charity._count.projects,
-        updatesCount: charity._count.updates
+        projectsCount: charity._count.projects
       }
     };
     
@@ -431,8 +422,7 @@ export const getCharityByManager = async (req, res) => {
         _count: {
           select: {
             donations: true,
-            projects: true,
-            updates: true
+            projects: true
           }
         }
       }
@@ -463,8 +453,7 @@ export const getCharityByManager = async (req, res) => {
       featuredProjects: charity.projects,
       stats: {
         donationsCount: charity._count.donations,
-        projectsCount: charity._count.projects,
-        updatesCount: charity._count.updates
+        projectsCount: charity._count.projects
       }
     };
     

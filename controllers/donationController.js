@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import Stripe from 'stripe';
 import crypto from 'crypto';
 import blockchainService from '../services/blockchainService.js'; // Add this import
-import blockchainVerificationService from '../services/blockchainVerificationService.js';
+import BlockchainVerificationService from '../services/blockchainVerificationService.js';
 
 const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -197,7 +197,10 @@ const confirmPayment = async (req, res) => {
     try {
       // Use blockchainVerificationService to verify the donation on blockchain
       console.log("Recording donation on blockchain via verification service...");
-      blockchainVerification = await blockchainVerificationService.verifyDonation(donation.id);
+
+      const verificationService = new BlockchainVerificationService();
+      await verificationService.initialize(); // Ensure service is initialized
+      blockchainVerification = verificationService.verifyDonation(donation.id);
       
       console.log("Blockchain verification successful:", blockchainVerification);
     } catch (blockchainError) {
@@ -776,6 +779,56 @@ const getBlockchainStats = async (req, res) => {
   }
 };
 
+// In controllers/donationController.js
+const getDonationContext = async (req, res) => {
+  try {
+    const { type, id } = req.params; // type: 'charity' or 'project'
+    
+    if (type === 'charity') {
+      const charity = await prisma.charity.findUnique({
+        where: { id: parseInt(id) },
+        include: {
+          projects: {
+            where: { status: 'ACTIVE' },
+            select: { id: true, title: true, status: true }
+          }
+        }
+      });
+      
+      if (!charity) {
+        return res.status(404).json({ error: 'Charity not found' });
+      }
+      
+      return res.json({
+        type: 'charity',
+        charity,
+        projects: charity.projects
+      });
+    } else if (type === 'project') {
+      const project = await prisma.project.findUnique({
+        where: { id: parseInt(id) },
+        include: {
+          charity: {
+            select: { id: true, name: true, category: true }
+          }
+        }
+      });
+      
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      return res.json({
+        type: 'project',
+        project,
+        charity: project.charity
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get donation context' });
+  }
+};
+
 // Don't forget to add these to your export
 export default {
   createPaymentIntent,
@@ -789,6 +842,7 @@ export default {
   getCharityFlowData,
   getVerificationStatus,
   verifyDonationOnBlockchain,
-  getBlockchainStats
+  getBlockchainStats,
+  getDonationContext
 };
 

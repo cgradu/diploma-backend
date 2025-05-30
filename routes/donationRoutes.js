@@ -13,7 +13,8 @@ router.post('/confirm-payment', authenticate, donationController.confirmPayment)
 router.get('/history', authenticate, donationController.getDonationHistory);
 router.get('/:id', authenticate, donationController.getDonationDetails);
 
-// Donation statistics routes
+// Donation statistics routes// In routes/donationRoutes.js - Add a route for donation with pre-filled data
+router.get('/create/:type/:id', authenticate, donationController.getDonationContext);
 router.get('/charity/:charityId/stats', donationController.getCharityDonationStats);
 
 // Webhook route (no authentication, relies on Stripe signature)

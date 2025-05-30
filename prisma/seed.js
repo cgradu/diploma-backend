@@ -158,40 +158,6 @@ async function main() {
     charityUsers[9].id
   ));
   
-  // Create some charity updates
-  await createCharityUpdate(
-    'New School Built in Rural Area',
-    'We are happy to announce that we have completed construction of a new school that will serve 200 children in a rural community.',
-    charities[0].id
-  );
-  
-  await createCharityUpdate(
-    'Teacher Training Program Launched',
-    'Our new teacher training program has begun, with 50 teachers participating in the first cohort.',
-    charities[0].id
-  );
-  
-  await createCharityUpdate(
-    'Clean Water Project Milestone',
-    'We have successfully installed 5 wells in the target region, providing clean water to over 1,000 people.',
-    charities[1].id
-  );
-  
-  // Create updates for new charities
-  for (let i = 2; i < charities.length; i++) {
-    await createCharityUpdate(
-      `${charities[i].name} Launch Announcement`,
-      `We are excited to officially launch our organization dedicated to ${charities[i].description.toLowerCase()} Stay tuned for upcoming projects!`,
-      charities[i].id
-    );
-    
-    await createCharityUpdate(
-      `${charities[i].name} First Milestone`,
-      `We've reached our first major milestone! Thanks to our supporters, we've been able to impact over 500 individuals through our initial programs.`,
-      charities[i].id
-    );
-  }
-  
   // Create projects
   // Original projects for the first two charities
   const projects = [];

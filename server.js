@@ -1,4 +1,4 @@
-// server.js - Updated with blockchain integration
+// server.js - Updated with admin routes
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -18,7 +18,8 @@ import charityRoutes from './routes/charityRoutes.js';
 import donationRoutes from './routes/donationRoutes.js';
 import donationController from './controllers/donationController.js';
 import projectRoutes from './routes/projectRoutes.js';
-import testRoutes from './routes/testRoutes.js'; // Add test routes
+import testRoutes from './routes/testRoutes.js';
+import adminRoutes from './routes/adminRoutes.js'; // Add admin routes
 
 const PORT = process.env.PORT || 4700;
 const app = express();
@@ -64,7 +65,8 @@ app.use('/auth', authRoutes);
 app.use('/charities', charityRoutes);
 app.use('/donations', donationRoutes);
 app.use('/projects', projectRoutes);
-app.use('/api/test', testRoutes); // Add test routes
+app.use('/api/test', testRoutes);
+app.use('/admin', adminRoutes); // Add admin routes
 
 // Root route with blockchain status
 app.get('/', async (req, res) => {
@@ -90,6 +92,7 @@ app.get('/', async (req, res) => {
         charities: '/charities',
         donations: '/donations',
         projects: '/projects',
+        admin: '/admin',
         tests: '/api/test'
       }
     });
@@ -149,7 +152,7 @@ app.use((error, req, res, next) => {
 app.use('*', (req, res) => {
   res.status(404).json({
     message: `Route ${req.method} ${req.originalUrl} not found`,
-    availableRoutes: ['/auth', '/charities', '/donations', '/projects', '/api/test']
+    availableRoutes: ['/auth', '/charities', '/donations', '/projects', '/admin', '/api/test']
   });
 });
 
@@ -201,6 +204,7 @@ async function startServer() {
       console.log('✅ Server running successfully!');
       console.log(`🌐 Server URL: http://localhost:${PORT}`);
       console.log(`📊 Health Check: http://localhost:${PORT}/health`);
+      console.log(`🔐 Admin Dashboard: http://localhost:${PORT}/admin`);
       console.log(`🧪 Test Interface: http://localhost:${PORT}/api/test`);
       console.log('=' .repeat(50));
     });
