@@ -1,10 +1,9 @@
 // controllers/adminController.js
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { validatePassword } from '../utils/passwordValidation.js';
 
 const prisma = new PrismaClient();
-
-// ==================== DASHBOARD OVERVIEW ====================
 export const getDashboardStats = async (req, res) => {
   try {
     // Check admin authorization
@@ -267,6 +266,7 @@ export const getUserById = async (req, res) => {
   }
 };
 
+// Replace your existing createUser function with this updated version:
 export const createUser = async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -274,6 +274,31 @@ export const createUser = async (req, res) => {
     }
 
     const { name, email, password, role, phone, address } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email, and password are required',
+        errors: {
+          name: !name ? 'Name is required' : null,
+          email: !email ? 'Email is required' : null,
+          password: !password ? 'Password is required' : null
+        }
+      });
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password does not meet security requirements',
+        errors: passwordValidation.errors,
+        requirements: passwordValidation.requirements,
+        strength: passwordValidation.strength
+      });
+    }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -288,7 +313,7 @@ export const createUser = async (req, res) => {
     }
 
     // Hash password
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
 
     const user = await prisma.user.create({
@@ -304,14 +329,29 @@ export const createUser = async (req, res) => {
 
     res.status(201).json({
       success: true,
+      message: 'User created successfully',
       data: {
-        ...user,
-        password: undefined
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        address: user.address,
+        createdAt: user.createdAt
       }
     });
 
   } catch (error) {
     console.error('Error creating user:', error);
+    
+    // Handle Prisma unique constraint violations
+    if (error.code === 'P2002') {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already taken'
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Error creating user',
@@ -320,6 +360,7 @@ export const createUser = async (req, res) => {
   }
 };
 
+// Replace your existing updateUser function with this updated version:
 export const updateUser = async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -329,11 +370,35 @@ export const updateUser = async (req, res) => {
     const { id } = req.params;
     const { name, email, role, phone, address, password } = req.body;
 
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: Number(id) }
+    });
+
+    if (!existingUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
     const updateData = { name, email, role, phone, address };
 
-    // Hash new password if provided
+    // If password is being updated, validate it
     if (password) {
-      const salt = await bcrypt.genSalt(10);
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password does not meet security requirements',
+          errors: passwordValidation.errors,
+          requirements: passwordValidation.requirements,
+          strength: passwordValidation.strength
+        });
+      }
+
+      // Hash new password
+      const salt = await bcrypt.genSalt(12);
       updateData.password = await bcrypt.hash(password, salt);
     }
 
@@ -344,14 +409,29 @@ export const updateUser = async (req, res) => {
 
     res.status(200).json({
       success: true,
+      message: 'User updated successfully',
       data: {
-        ...user,
-        password: undefined
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        address: user.address,
+        updatedAt: user.updatedAt
       }
     });
 
   } catch (error) {
     console.error('Error updating user:', error);
+    
+    // Handle Prisma unique constraint violations
+    if (error.code === 'P2002') {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already taken by another user'
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Error updating user',

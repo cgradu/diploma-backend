@@ -7,16 +7,20 @@ class BlockchainService {
     this.initialize();
   }
 
-  async initialize() {
+    async initialize() {
     try {
-      this.wallet = getWallet();
+      const { wallet } = await getWallet();
+      this.wallet = wallet;
+
+      // Create contract instance with signer
       this.contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, this.wallet);
-      console.log('Connected to blockchain contract at:', CONTRACT_ADDRESS);
+
+      // Debugging info
+      console.log("✅ Contract supports sendTransaction:", typeof this.contract.runner?.sendTransaction === 'function');
+      console.log('✅ Connected to blockchain contract at:', CONTRACT_ADDRESS);
     } catch (error) {
-      console.error('Error initializing blockchain service:', error);
-      // Don't throw error to allow the service to continue functioning
-      console.error('Using mock functionality instead');
-      this.useMock = true;
+      console.error('❌ Error initializing blockchain service:', error.message);
+      console.error('⚠️ Using mock functionality instead');
     }
   }
 
@@ -25,7 +29,7 @@ class BlockchainService {
       console.log('Recording donation on blockchain:', donation);
       
       // Convert amount to wei (assuming 18 decimals)
-      const amountInWei = ethers.parseUnits(donation.amount.toString(), 18);
+      const amountInWei = ethers.parseUnits(donation.amount.toString(), 2);
       
       // Call smart contract function
       const tx = await this.contract.recordDonation(
@@ -89,11 +93,6 @@ class BlockchainService {
 
   async getCharityFlow(charityId) {
     try {
-      // If initialization failed, use mock functionality
-      if (this.useMock) {
-        return this._mockGetCharityFlow(charityId);
-      }
-
       const flow = await this.contract.getCharityFlow(charityId.toString());
       
       return {

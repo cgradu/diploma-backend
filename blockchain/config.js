@@ -1,9 +1,10 @@
 // backend/blockchain/config.js
-import { ethers } from 'ethers';
+import { ethers, Wallet} from 'ethers';
 import dotenv from 'dotenv';
 import { CONTRACT_ABI } from './contractABI.js';
 
-dotenv.config();
+dotenv.config({override: true});
+console.log('Private key:', process.env.BLOCKCHAIN_PRIVATE_KEY ? '***' : 'not set');
 
 const NETWORK = process.env.BLOCKCHAIN_NETWORK;
 
@@ -25,6 +26,8 @@ const networks = {
     name: 'Ethereum Mainnet'
   }
 };
+
+const network = networks[NETWORK];
 
 // Enhanced validation with detailed error messages
 const validateConfig = () => {
@@ -63,10 +66,6 @@ const validateConfig = () => {
     
     if (!process.env.BLOCKCHAIN_PRIVATE_KEY) {
       errors.push('BLOCKCHAIN_PRIVATE_KEY is required for sending transactions');
-    } else if (!process.env.BLOCKCHAIN_PRIVATE_KEY.startsWith('0x')) {
-      warnings.push('BLOCKCHAIN_PRIVATE_KEY should start with 0x');
-    } else if (process.env.BLOCKCHAIN_PRIVATE_KEY.length !== 66) {
-      warnings.push('BLOCKCHAIN_PRIVATE_KEY should be 66 characters long (including 0x)');
     } else {
       console.log('✅ BLOCKCHAIN_PRIVATE_KEY is present and properly formatted');
     }
@@ -98,6 +97,7 @@ export const getProvider = async (retries = 3) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const provider = new ethers.JsonRpcProvider(network.url);
+      console.log(`🔗 Provider URL: ${network.url}`);
       
       // Test the connection
       const blockNumber = await provider.getBlockNumber();
@@ -133,26 +133,27 @@ export const getProvider = async (retries = 3) => {
 };
 
 export const getWallet = async () => {
-  const provider = await getProvider();
-  
   try {
-    // Make sure the private key is properly formatted
-    let privateKey = process.env.BLOCKCHAIN_PRIVATE_KEY;
-    
-    const wallet = new ethers.Wallet(privateKey, provider);
-    
+    const privateKey = process.env.BLOCKCHAIN_PRIVATE_KEY;
+
+    if (!privateKey || privateKey.length !== 66) {
+      throw new Error('Invalid or missing BLOCKCHAIN_PRIVATE_KEY');
+    }
+
+    const provider = new ethers.JsonRpcProvider(network.url);
+    const wallet = new Wallet(privateKey, provider); // signer
+
     console.log(`💼 Wallet address: ${wallet.address}`);
-    
-    // Check balance
+
     const balance = await provider.getBalance(wallet.address);
-    const balanceInEth = ethers.formatEther(balance);
-    console.log(`💰 Wallet balance: ${balanceInEth} ETH`);
-    
-    return wallet; // This should be a wallet, not a provider
+    console.log(`💰 Wallet balance: ${ethers.formatEther(balance)} ETH`);
+
+    return { wallet };
   } catch (error) {
     throw new Error(`Failed to create wallet: ${error.message}`);
   }
 };
+
 
 export const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS;
 export { CONTRACT_ABI };

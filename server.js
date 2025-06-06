@@ -1,4 +1,4 @@
-// server.js - Updated with admin routes
+// server.js - Updated with enhanced donation routes and blockchain integration
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -15,11 +15,10 @@ import BlockchainVerificationService from './services/blockchainVerificationServ
 // Import routes
 import authRoutes from './routes/authRoutes.js';
 import charityRoutes from './routes/charityRoutes.js';
-import donationRoutes from './routes/donationRoutes.js';
+import donationRoutes from './routes/donationRoutes.js'; // Enhanced donation routes
 import donationController from './controllers/donationController.js';
 import projectRoutes from './routes/projectRoutes.js';
-import testRoutes from './routes/testRoutes.js';
-import adminRoutes from './routes/adminRoutes.js'; // Add admin routes
+import adminRoutes from './routes/adminRoutes.js';
 
 const PORT = process.env.PORT || 4700;
 const app = express();
@@ -39,10 +38,57 @@ async function initializeBlockchainServices() {
     await blockchainVerificationService.initialize();
     
     console.log('✅ Blockchain services initialized successfully');
+    
+    // Start background verification process for pending donations
+    startBackgroundVerification();
+    
   } catch (error) {
     console.error('⚠️ Blockchain services initialization failed:', error.message);
     console.log('🔄 Application will continue in fallback mode');
   }
+}
+
+// Background process to verify pending donations
+async function startBackgroundVerification() {
+  setInterval(async () => {
+    try {
+      console.log('🔍 Running background blockchain verification...');
+      
+      // Get unverified donations
+      const unverifiedDonations = await prisma.donation.findMany({
+        where: {
+          paymentStatus: 'SUCCEEDED',
+          OR: [
+            { blockchainVerification: null },
+            { 
+              blockchainVerification: {
+                verified: false,
+                transactionHash: {
+                  startsWith: 'pending_'
+                }
+              }
+            }
+          ]
+        },
+        take: 5 // Process 5 at a time to avoid overwhelming the system
+      });
+
+      if (unverifiedDonations.length > 0) {
+        console.log(`📝 Found ${unverifiedDonations.length} donations to verify`);
+        
+        for (const donation of unverifiedDonations) {
+          try {
+            await blockchainVerificationService.verifyDonation(donation.id);
+            console.log(`✅ Verified donation ${donation.id}`);
+          } catch (error) {
+            console.error(`❌ Failed to verify donation ${donation.id}:`, error.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Background verification error:', error);
+    }
+  }, 5 * 60 * 1000); // Run every 5 minutes
 }
 
 // Webhook middleware (must be before express.json())
@@ -50,7 +96,7 @@ app.use('/donations/webhook', express.raw({ type: 'application/json' }), donatio
 
 // CORS configuration
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -63,30 +109,52 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/auth', authRoutes);
 app.use('/charities', charityRoutes);
-app.use('/donations', donationRoutes);
+app.use('/donations', donationRoutes); // Enhanced donation routes with blockchain features
 app.use('/projects', projectRoutes);
-app.use('/api/test', testRoutes);
-app.use('/admin', adminRoutes); // Add admin routes
+app.use('/admin', adminRoutes);
 
-// Root route with blockchain status
+// Root route with enhanced blockchain status
 app.get('/', async (req, res) => {
   try {
     let blockchainStatus = 'Not initialized';
+    let verificationStats = null;
     
-    if (blockchainService) {
+    if (blockchainService && blockchainVerificationService) {
       try {
         // Test blockchain connection
         await blockchainService.initialize();
         blockchainStatus = 'Connected and operational';
+        
+        // Get verification statistics
+        verificationStats = await blockchainVerificationService.getVerificationStats();
       } catch (error) {
         blockchainStatus = `Error: ${error.message}`;
       }
     }
     
+    // Get platform statistics
+    const [totalUsers, totalCharities, totalDonations, totalVerified] = await Promise.all([
+      prisma.user.count(),
+      prisma.charity.count(),
+      prisma.donation.count({ where: { paymentStatus: 'SUCCEEDED' } }),
+      prisma.blockchainVerification.count({ where: { verified: true } })
+    ]);
+    
     res.json({
-      message: 'Charity Transparency Blockchain Platform API',
+      message: 'Charitrace - Charity Transparency Blockchain Platform API',
       status: 'running',
-      blockchain: blockchainStatus,
+      version: '2.0.0',
+      blockchain: {
+        status: blockchainStatus,
+        verification: verificationStats
+      },
+      platform: {
+        users: totalUsers,
+        charities: totalCharities,
+        donations: totalDonations,
+        verifiedDonations: totalVerified,
+        transparencyRate: totalDonations > 0 ? Math.round((totalVerified / totalDonations) * 100) : 0
+      },
       endpoints: {
         auth: '/auth',
         charities: '/charities',
@@ -94,6 +162,12 @@ app.get('/', async (req, res) => {
         projects: '/projects',
         admin: '/admin',
         tests: '/api/test'
+      },
+      features: {
+        blockchainVerification: true,
+        impactTracking: true,
+        transparencyScoring: true,
+        donationHistory: true
       }
     });
   } catch (error) {
@@ -104,7 +178,7 @@ app.get('/', async (req, res) => {
   }
 });
 
-// Health check endpoint
+// Enhanced health check endpoint
 app.get('/health', async (req, res) => {
   try {
     // Test database connection
@@ -112,21 +186,51 @@ app.get('/health', async (req, res) => {
     
     // Test blockchain connection
     let blockchainHealth = 'disconnected';
-    if (blockchainService) {
+    let blockchainDetails = {};
+    
+    if (blockchainService && blockchainVerificationService) {
       try {
         await blockchainService.initialize();
         blockchainHealth = 'connected';
+        
+        // Get blockchain stats
+        const stats = await blockchainVerificationService.getVerificationStats();
+        blockchainDetails = {
+          verifiedDonations: stats.verifiedCount,
+          pendingVerifications: stats.pendingCount,
+          verificationRate: stats.verificationRate
+        };
       } catch (error) {
         blockchainHealth = 'error';
+        blockchainDetails = { error: error.message };
       }
     }
+    
+    // Get recent activity
+    const recentDonations = await prisma.donation.count({
+      where: {
+        paymentStatus: 'SUCCEEDED',
+        createdAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
+        }
+      }
+    });
     
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
       services: {
         database: 'connected',
         blockchain: blockchainHealth
+      },
+      blockchain: blockchainDetails,
+      activity: {
+        recentDonations24h: recentDonations
+      },
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + ' MB'
       }
     });
   } catch (error) {
@@ -142,9 +246,34 @@ app.get('/health', async (req, res) => {
 app.use((error, req, res, next) => {
   console.error('Global error handler:', error);
   
+  // Handle Prisma errors
+  if (error.code === 'P2002') {
+    return res.status(400).json({
+      message: 'A record with this information already exists',
+      field: error.meta?.target?.[0]
+    });
+  }
+  
+  if (error.code === 'P2025') {
+    return res.status(404).json({
+      message: 'Record not found'
+    });
+  }
+  
+  // Handle validation errors
+  if (error.name === 'ValidationError') {
+    return res.status(400).json({
+      message: 'Validation failed',
+      errors: error.errors
+    });
+  }
+  
   res.status(error.status || 500).json({
     message: error.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+    ...(process.env.NODE_ENV === 'development' && { 
+      stack: error.stack,
+      details: error 
+    })
   });
 });
 
@@ -152,7 +281,15 @@ app.use((error, req, res, next) => {
 app.use('*', (req, res) => {
   res.status(404).json({
     message: `Route ${req.method} ${req.originalUrl} not found`,
-    availableRoutes: ['/auth', '/charities', '/donations', '/projects', '/admin', '/api/test']
+    availableRoutes: [
+      '/auth - Authentication endpoints',
+      '/charities - Charity management',
+      '/donations - Donation processing with blockchain verification',
+      '/projects - Project management',
+      '/admin - Administrative functions',
+      '/api/test - Testing and debugging'
+    ],
+    documentation: 'https://docs.charitrace.org'
   });
 });
 
@@ -170,23 +307,31 @@ async function testDatabaseConnection() {
 
 // Graceful shutdown handler
 process.on('SIGINT', async () => {
-  console.log('\n🛑 Shutting down server...');
+  console.log('\n🛑 Shutting down server gracefully...');
   
   try {
+    // Close database connection
     await prisma.$disconnect();
     console.log('✅ Database connection closed');
+    
+    // Clean up blockchain services
+    if (blockchainService) {
+      console.log('✅ Blockchain service cleaned up');
+    }
+    
+    console.log('✅ Server shutdown complete');
   } catch (error) {
-    console.error('❌ Error closing database connection:', error);
+    console.error('❌ Error during shutdown:', error);
   }
   
   process.exit(0);
 });
 
-// Start server with all initializations
+// Enhanced startup sequence
 async function startServer() {
   try {
-    console.log('🚀 Starting Charity Transparency Platform...');
-    console.log('=' .repeat(50));
+    console.log('🚀 Starting Charitrace Platform...');
+    console.log('=' .repeat(60));
     
     // Test database connection
     const dbConnected = await testDatabaseConnection();
@@ -200,13 +345,20 @@ async function startServer() {
     
     // Start Express server
     app.listen(PORT, () => {
-      console.log('=' .repeat(50));
-      console.log('✅ Server running successfully!');
+      console.log('=' .repeat(60));
+      console.log('✅ Charitrace Platform running successfully!');
       console.log(`🌐 Server URL: http://localhost:${PORT}`);
       console.log(`📊 Health Check: http://localhost:${PORT}/health`);
       console.log(`🔐 Admin Dashboard: http://localhost:${PORT}/admin`);
+      console.log(`💰 Donation API: http://localhost:${PORT}/donations`);
       console.log(`🧪 Test Interface: http://localhost:${PORT}/api/test`);
-      console.log('=' .repeat(50));
+      console.log('');
+      console.log('🔗 Blockchain Features:');
+      console.log('   • Donation verification');
+      console.log('   • Impact tracking');
+      console.log('   • Transparency scoring');
+      console.log('   • Transaction history');
+      console.log('=' .repeat(60));
     });
     
   } catch (error) {

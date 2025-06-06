@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import crypto from 'crypto';
 import blockchainService from '../services/blockchainService.js'; // Add this import
 import BlockchainVerificationService from '../services/blockchainVerificationService.js';
+import { get } from 'http';
 
 const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -95,7 +96,6 @@ const createPaymentIntent = async (req, res) => {
   }
 };
 
-// confirmPayment function
 // confirmPayment function - Updated with proper blockchain integration
 const confirmPayment = async (req, res) => {
   try {
@@ -829,6 +829,220 @@ const getDonationContext = async (req, res) => {
   }
 };
 
+// Get simple donor statistics for dashboard
+export const getDonorDashboardStats = async (req, res) => {
+  try {
+    const donorId = req.user.id;
+    
+    // Get basic donation stats
+    const donationStats = await prisma.donation.aggregate({
+      where: {
+        donorId: donorId,
+        paymentStatus: 'SUCCEEDED'
+      },
+      _sum: {
+        amount: true
+      },
+      _count: true
+    });
+
+    // Get unique charities count
+    const uniqueCharities = await prisma.donation.findMany({
+      where: {
+        donorId: donorId,
+        paymentStatus: 'SUCCEEDED'
+      },
+      select: {
+        charityId: true
+      },
+      distinct: ['charityId']
+    });
+
+    // Get recent donations (last 5 for preview)
+    const recentDonations = await prisma.donation.findMany({
+      where: {
+        donorId: donorId,
+        paymentStatus: 'SUCCEEDED'
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 5,
+      include: {
+        charity: {
+          select: {
+            id: true,
+            name: true,
+            category: true
+          }
+        },
+        project: {
+          select: {
+            id: true,
+            title: true
+          }
+        }
+      }
+    });
+
+    // Get active projects count (projects with donations from this donor)
+    const activeProjects = await prisma.donation.findMany({
+      where: {
+        donorId: donorId,
+        paymentStatus: 'SUCCEEDED',
+        projectId: { not: null },
+        project: {
+          status: 'ACTIVE'
+        }
+      },
+      select: {
+        projectId: true
+      },
+      distinct: ['projectId']
+    });
+
+    const stats = {
+      totalDonated: donationStats._sum.amount || 0,
+      totalDonations: donationStats._count || 0,
+      charitiesSupported: uniqueCharities.length,
+      activeProjects: activeProjects.length,
+      recentDonations: recentDonations.map(donation => ({
+        id: donation.id,
+        amount: donation.amount,
+        currency: donation.currency,
+        createdAt: donation.createdAt,
+        charity: donation.charity,
+        project: donation.project,
+        anonymous: donation.anonymous
+      }))
+    };
+
+    res.status(200).json({
+      success: true,
+      data: stats
+    });
+
+  } catch (error) {
+    console.error('Error fetching donor dashboard stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching donor statistics',
+      error: error.message
+    });
+  }
+};
+
+const getBlockchainInsights = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get all user donations with blockchain verification
+    const donations = await prisma.donation.findMany({
+      where: {
+        donorId: userId,
+        paymentStatus: 'SUCCEEDED'
+      },
+      include: {
+        blockchainVerification: true,
+        charity: {
+          select: {
+            id: true,
+            name: true,
+            category: true
+          }
+        },
+        project: {
+          select: {
+            id: true,
+            title: true
+          }
+        }
+      }
+    });
+
+    // Calculate blockchain statistics
+    const verifiedDonations = donations.filter(d => d.blockchainVerification?.verified);
+    const pendingVerifications = donations.filter(d => d.blockchainVerification && !d.blockchainVerification.verified);
+    const unverifiedDonations = donations.filter(d => !d.blockchainVerification);
+
+    // Get transaction details for verified donations
+    const blockchainTransactions = verifiedDonations.map(donation => ({
+      donationId: donation.id,
+      amount: donation.amount,
+      currency: donation.currency,
+      charity: donation.charity,
+      project: donation.project,
+      transactionHash: donation.blockchainVerification.transactionHash,
+      blockNumber: donation.blockchainVerification.blockNumber,
+      timestamp: donation.blockchainVerification.timestamp,
+      explorerUrl: `https://etherscan.io/tx/${donation.blockchainVerification.transactionHash}`,
+      donationDate: donation.createdAt
+    }));
+
+    // Calculate transparency metrics
+    const totalDonations = donations.length;
+    const verifiedCount = verifiedDonations.length;
+    const transparencyScore = totalDonations > 0 ? (verifiedCount / totalDonations) * 100 : 0;
+    const totalVerifiedAmount = verifiedDonations.reduce((sum, d) => sum + d.amount, 0);
+
+    // Group by charity for charity-specific blockchain data
+    const charityBlockchainData = {};
+    verifiedDonations.forEach(donation => {
+      const charityId = donation.charity.id;
+      if (!charityBlockchainData[charityId]) {
+        charityBlockchainData[charityId] = {
+          charity: donation.charity,
+          verifiedDonations: 0,
+          totalVerifiedAmount: 0,
+          transactions: []
+        };
+      }
+      
+      charityBlockchainData[charityId].verifiedDonations += 1;
+      charityBlockchainData[charityId].totalVerifiedAmount += donation.amount;
+      charityBlockchainData[charityId].transactions.push({
+        donationId: donation.id,
+        amount: donation.amount,
+        transactionHash: donation.blockchainVerification.transactionHash,
+        timestamp: donation.blockchainVerification.timestamp
+      });
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        summary: {
+          totalDonations,
+          verifiedDonations: verifiedCount,
+          pendingVerifications: pendingVerifications.length,
+          unverifiedDonations: unverifiedDonations.length,
+          transparencyScore: Math.round(transparencyScore * 100) / 100,
+          totalVerifiedAmount: Math.round(totalVerifiedAmount * 100) / 100
+        },
+        
+        transactions: blockchainTransactions
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
+        
+        charityBreakdown: Object.values(charityBlockchainData)
+          .sort((a, b) => b.totalVerifiedAmount - a.totalVerifiedAmount),
+        
+        verificationStatus: {
+          verified: verifiedCount,
+          pending: pendingVerifications.length,
+          unverified: unverifiedDonations.length
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching blockchain insights:', error);
+    return res.status(500).json({ 
+      success: false,
+      error: 'Failed to retrieve blockchain insights' 
+    });
+  }
+};
+
 // Don't forget to add these to your export
 export default {
   createPaymentIntent,
@@ -843,6 +1057,8 @@ export default {
   getVerificationStatus,
   verifyDonationOnBlockchain,
   getBlockchainStats,
-  getDonationContext
+  getDonationContext,
+  getDonorDashboardStats,
+  getBlockchainInsights
 };
 

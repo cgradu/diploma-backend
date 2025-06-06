@@ -1,4 +1,4 @@
-// backend/contracts/DonationTracker.sol
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 contract DonationTracker {
@@ -18,7 +18,6 @@ contract DonationTracker {
         string charityId;
         uint256 totalReceived;
         uint256 totalDisbursed;
-        uint256 adminFees;
         uint256 lastUpdate;
     }
     
@@ -28,21 +27,26 @@ contract DonationTracker {
     mapping(string => string[]) public donorDonations;
     
     string[] public allDonationIds;
+    address public owner;
     
     event DonationRecorded(
-        string indexed transactionId,
-        string indexed charityId,
-        string indexed donorId,
+        string transactionId,
+        string charityId,
+        string donorId,
         uint256 amount,
         uint256 timestamp
     );
     
     event FundsAllocated(
-        string indexed charityId,
+        string charityId,
         uint256 amount,
         string purpose,
         uint256 timestamp
     );
+    
+    constructor() {
+        owner = msg.sender;
+    }
     
     function recordDonation(
         string memory transactionId,
@@ -84,14 +88,12 @@ contract DonationTracker {
     function allocateFunds(
         string memory charityId,
         uint256 amount,
-        string memory purpose,
-        uint256 adminFee
+        string memory purpose
     ) public {
-        require(charityFlows[charityId].totalReceived >= charityFlows[charityId].totalDisbursed + amount + adminFee, 
+        require(charityFlows[charityId].totalReceived >= charityFlows[charityId].totalDisbursed + amount, 
                 "Insufficient funds");
         
         charityFlows[charityId].totalDisbursed += amount;
-        charityFlows[charityId].adminFees += adminFee;
         charityFlows[charityId].lastUpdate = block.timestamp;
         
         emit FundsAllocated(charityId, amount, purpose, block.timestamp);
@@ -105,18 +107,41 @@ contract DonationTracker {
         return donorDonations[donorId];
     }
     
+    function getDonation(string memory transactionId) public view returns (
+        string memory donorId,
+        string memory charityId,
+        string memory projectId,
+        uint256 amount,
+        string memory currency,
+        uint256 timestamp,
+        bool isAnonymous
+    ) {
+        Donation memory donation = donations[transactionId];
+        return (
+            donation.donorId,
+            donation.charityId,
+            donation.projectId,
+            donation.amount,
+            donation.currency,
+            donation.timestamp,
+            donation.isAnonymous
+        );
+    }
+    
     function getCharityFlow(string memory charityId) public view returns (
         uint256 totalReceived,
         uint256 totalDisbursed,
-        uint256 adminFees,
         uint256 balance
     ) {
         CharityFlow memory flow = charityFlows[charityId];
         return (
             flow.totalReceived,
             flow.totalDisbursed,
-            flow.adminFees,
-            flow.totalReceived - flow.totalDisbursed - flow.adminFees
+            flow.totalReceived - flow.totalDisbursed
         );
+    }
+    
+    function getAllDonationIds() public view returns (string[] memory) {
+        return allDonationIds;
     }
 }
