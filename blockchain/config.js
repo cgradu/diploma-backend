@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import { CONTRACT_ABI } from './contractABI.js';
 
 dotenv.config({override: true});
-console.log('Private key:', process.env.BLOCKCHAIN_PRIVATE_KEY ? '***' : 'not set');
 
 const NETWORK = process.env.BLOCKCHAIN_NETWORK;
 

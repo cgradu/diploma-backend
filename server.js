@@ -48,48 +48,48 @@ async function initializeBlockchainServices() {
   }
 }
 
-// Background process to verify pending donations
-async function startBackgroundVerification() {
-  setInterval(async () => {
-    try {
-      console.log('🔍 Running background blockchain verification...');
+// // Background process to verify pending donations
+// async function startBackgroundVerification() {
+//   setInterval(async () => {
+//     try {
+//       console.log('🔍 Running background blockchain verification...');
       
-      // Get unverified donations
-      const unverifiedDonations = await prisma.donation.findMany({
-        where: {
-          paymentStatus: 'SUCCEEDED',
-          OR: [
-            { blockchainVerification: null },
-            { 
-              blockchainVerification: {
-                verified: false,
-                transactionHash: {
-                  startsWith: 'pending_'
-                }
-              }
-            }
-          ]
-        },
-        take: 5 // Process 5 at a time to avoid overwhelming the system
-      });
+//       // Get unverified donations
+//       const unverifiedDonations = await prisma.donation.findMany({
+//         where: {
+//           paymentStatus: 'SUCCEEDED',
+//           OR: [
+//             { blockchainVerification: null },
+//             { 
+//               blockchainVerification: {
+//                 verified: false,
+//                 transactionHash: {
+//                   startsWith: 'pending_'
+//                 }
+//               }
+//             }
+//           ]
+//         },
+//         take: 5 // Process 5 at a time to avoid overwhelming the system
+//       });
 
-      if (unverifiedDonations.length > 0) {
-        console.log(`📝 Found ${unverifiedDonations.length} donations to verify`);
+//       if (unverifiedDonations.length > 0) {
+//         console.log(`📝 Found ${unverifiedDonations.length} donations to verify`);
         
-        for (const donation of unverifiedDonations) {
-          try {
-            await blockchainVerificationService.verifyDonation(donation.id);
-            console.log(`✅ Verified donation ${donation.id}`);
-          } catch (error) {
-            console.error(`❌ Failed to verify donation ${donation.id}:`, error.message);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Background verification error:', error);
-    }
-  }, 5 * 60 * 1000); // Run every 5 minutes
-}
+//         for (const donation of unverifiedDonations) {
+//           try {
+//             await blockchainVerificationService.verifyDonation(donation.id);
+//             console.log(`✅ Verified donation ${donation.id}`);
+//           } catch (error) {
+//             console.error(`❌ Failed to verify donation ${donation.id}:`, error.message);
+//           }
+//         }
+//       }
+//     } catch (error) {
+//       console.error('Background verification error:', error);
+//     }
+//   }, 5 * 60 * 1000); // Run every 5 minutes
+// }
 
 // Webhook middleware (must be before express.json())
 app.use('/donations/webhook', express.raw({ type: 'application/json' }), donationController.handleWebhook);
@@ -348,10 +348,6 @@ async function startServer() {
       console.log('=' .repeat(60));
       console.log('✅ Charitrace Platform running successfully!');
       console.log(`🌐 Server URL: http://localhost:${PORT}`);
-      console.log(`📊 Health Check: http://localhost:${PORT}/health`);
-      console.log(`🔐 Admin Dashboard: http://localhost:${PORT}/admin`);
-      console.log(`💰 Donation API: http://localhost:${PORT}/donations`);
-      console.log(`🧪 Test Interface: http://localhost:${PORT}/api/test`);
       console.log('');
       console.log('🔗 Blockchain Features:');
       console.log('   • Donation verification');

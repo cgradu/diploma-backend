@@ -1043,6 +1043,197 @@ const getBlockchainInsights = async (req, res) => {
   }
 };
 
+const getMyDonations = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { 
+      page = 1, 
+      limit = 10, 
+      status, 
+      charityId, 
+      projectId,
+      startDate,
+      endDate,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const skip = (Number(page) - 1) * Number(limit);
+    
+    // Build filter object
+    const where = {
+      donorId: userId
+    };
+
+    // Add optional filters
+    if (status && status !== 'all') {
+      where.paymentStatus = status;
+    }
+
+    if (charityId) {
+      where.charityId = Number(charityId);
+    }
+
+    if (projectId) {
+      where.projectId = Number(projectId);
+    }
+
+    // Add date range filter
+    if (startDate && endDate) {
+      where.createdAt = {
+        gte: new Date(startDate),
+        lte: new Date(endDate)
+      };
+    } else if (startDate) {
+      where.createdAt = {
+        gte: new Date(startDate)
+      };
+    } else if (endDate) {
+      where.createdAt = {
+        lte: new Date(endDate)
+      };
+    }
+
+    // Get donations with pagination
+    const [donations, total] = await Promise.all([
+      prisma.donation.findMany({
+        where,
+        skip,
+        take: Number(limit),
+        orderBy: {
+          [sortBy]: sortOrder
+        },
+        include: {
+          charity: {
+            select: {
+              id: true,
+              name: true,
+              category: true,
+              description: true
+            }
+          },
+          project: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              goal: true,
+              currentAmount: true
+            }
+          },
+          blockchainVerification: {
+            select: {
+              id: true,
+              transactionHash: true,
+              verified: true,
+              timestamp: true,
+              blockNumber: true
+            }
+          }
+        }
+      }),
+      prisma.donation.count({ where })
+    ]);
+
+    // Calculate summary statistics
+    const totalDonationAmount = await prisma.donation.aggregate({
+      where: { donorId: userId, paymentStatus: 'SUCCEEDED' },
+      _sum: { amount: true },
+      _count: true
+    });
+
+    const verifiedDonations = await prisma.donation.count({
+      where: {
+        donorId: userId,
+        paymentStatus: 'SUCCEEDED',
+        blockchainVerification: {
+          verified: true
+        }
+      }
+    });
+
+    // Get donation categories breakdown
+    const categoryBreakdown = await prisma.donation.groupBy({
+      by: ['charityId'],
+      where: {
+        donorId: userId,
+        paymentStatus: 'SUCCEEDED'
+      },
+      _sum: {
+        amount: true
+      },
+      _count: true
+    });
+
+    // Get charity names for category breakdown
+    const charityIds = categoryBreakdown.map(item => item.charityId);
+    const charities = await prisma.charity.findMany({
+      where: { id: { in: charityIds } },
+      select: { id: true, name: true, category: true }
+    });
+
+    const enrichedCategoryBreakdown = categoryBreakdown.map(item => {
+      const charity = charities.find(c => c.id === item.charityId);
+      return {
+        charityId: item.charityId,
+        charityName: charity?.name || 'Unknown',
+        category: charity?.category || 'UNKNOWN',
+        totalAmount: item._sum.amount || 0,
+        donationCount: item._count
+      };
+    });
+
+    // Format donations for response
+    const formattedDonations = donations.map(donation => ({
+      id: donation.id,
+      amount: donation.amount,
+      currency: donation.currency,
+      message: donation.message,
+      anonymous: donation.anonymous,
+      paymentStatus: donation.paymentStatus,
+      receiptUrl: donation.receiptUrl,
+      createdAt: donation.createdAt,
+      charity: donation.charity,
+      project: donation.project,
+      blockchain: {
+        verified: donation.blockchainVerification?.verified || false,
+        transactionHash: donation.blockchainVerification?.transactionHash || null,
+        blockNumber: donation.blockchainVerification?.blockNumber || null,
+        verificationDate: donation.blockchainVerification?.timestamp || null
+      }
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        donations: formattedDonations,
+        pagination: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / Number(limit))
+        },
+        summary: {
+          totalDonationAmount: totalDonationAmount._sum.amount || 0,
+          totalDonations: totalDonationAmount._count || 0,
+          verifiedDonations,
+          verificationRate: totalDonationAmount._count > 0 
+            ? Math.round((verifiedDonations / totalDonationAmount._count) * 100) 
+            : 0
+        },
+        categoryBreakdown: enrichedCategoryBreakdown
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching user donations:', error);
+    return res.status(500).json({ 
+      success: false,
+      error: 'Failed to retrieve donation history' 
+    });
+  }
+};
+
 // Don't forget to add these to your export
 export default {
   createPaymentIntent,
@@ -1059,6 +1250,7 @@ export default {
   getBlockchainStats,
   getDonationContext,
   getDonorDashboardStats,
-  getBlockchainInsights
+  getBlockchainInsights,
+  getMyDonations
 };
 
