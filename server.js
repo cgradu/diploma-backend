@@ -19,6 +19,7 @@ import donationRoutes from './routes/donationRoutes.js'; // Enhanced donation ro
 import donationController from './controllers/donationController.js';
 import projectRoutes from './routes/projectRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import statsRoutes from './routes/statsRoutes.js'; // Statistics routes
 
 const PORT = process.env.PORT || 4700;
 const app = express();
@@ -112,6 +113,7 @@ app.use('/charities', charityRoutes);
 app.use('/donations', donationRoutes); // Enhanced donation routes with blockchain features
 app.use('/projects', projectRoutes);
 app.use('/admin', adminRoutes);
+app.use('/api/stats', statsRoutes); // Statistics routes
 
 // Root route with enhanced blockchain status
 app.get('/', async (req, res) => {
@@ -161,7 +163,7 @@ app.get('/', async (req, res) => {
         donations: '/donations',
         projects: '/projects',
         admin: '/admin',
-        tests: '/api/test'
+        stats: '/api/stats',
       },
       features: {
         blockchainVerification: true,

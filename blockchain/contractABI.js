@@ -147,7 +147,45 @@ export const CONTRACT_ABI = [
 				"type": "uint256"
 			}
 		],
+		"name": "allCharityIds",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
 		"name": "allDonationIds",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "allDonorIds",
 		"outputs": [
 			{
 				"internalType": "string",
@@ -318,6 +356,40 @@ export const CONTRACT_ABI = [
 				"internalType": "string",
 				"name": "charityId",
 				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "limit",
+				"type": "uint256"
+			}
+		],
+		"name": "getCharityDonationHistory",
+		"outputs": [
+			{
+				"internalType": "string[]",
+				"name": "transactionIds",
+				"type": "string[]"
+			},
+			{
+				"internalType": "uint256[]",
+				"name": "amounts",
+				"type": "uint256[]"
+			},
+			{
+				"internalType": "uint256[]",
+				"name": "timestamps",
+				"type": "uint256[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "charityId",
+				"type": "string"
 			}
 		],
 		"name": "getCharityFlow",
@@ -335,6 +407,50 @@ export const CONTRACT_ABI = [
 			{
 				"internalType": "uint256",
 				"name": "balance",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "charityId",
+				"type": "string"
+			}
+		],
+		"name": "getCharityStats",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "totalDonations",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "totalAmount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "totalDisbursed",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "balance",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "averageDonation",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "lastDonationTime",
 				"type": "uint256"
 			}
 		],
@@ -423,6 +539,160 @@ export const CONTRACT_ABI = [
 				"internalType": "string[]",
 				"name": "",
 				"type": "string[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "donorId",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "limit",
+				"type": "uint256"
+			}
+		],
+		"name": "getDonorDonationHistory",
+		"outputs": [
+			{
+				"internalType": "string[]",
+				"name": "transactionIds",
+				"type": "string[]"
+			},
+			{
+				"internalType": "string[]",
+				"name": "charityIds",
+				"type": "string[]"
+			},
+			{
+				"internalType": "uint256[]",
+				"name": "amounts",
+				"type": "uint256[]"
+			},
+			{
+				"internalType": "uint256[]",
+				"name": "timestamps",
+				"type": "uint256[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "donorId",
+				"type": "string"
+			}
+		],
+		"name": "getDonorStats",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "totalDonations",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "totalAmount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "uniqueCharities",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "averageDonation",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "lastDonationTime",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getPlatformStats",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "totalDonations",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "totalAmount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "totalCharities",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "totalDonors",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "averageDonation",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "limit",
+				"type": "uint256"
+			}
+		],
+		"name": "getRecentDonations",
+		"outputs": [
+			{
+				"internalType": "string[]",
+				"name": "",
+				"type": "string[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "limit",
+				"type": "uint256"
+			}
+		],
+		"name": "getTopCharitiesByDonations",
+		"outputs": [
+			{
+				"internalType": "string[]",
+				"name": "charityIds",
+				"type": "string[]"
+			},
+			{
+				"internalType": "uint256[]",
+				"name": "donationCounts",
+				"type": "uint256[]"
 			}
 		],
 		"stateMutability": "view",
