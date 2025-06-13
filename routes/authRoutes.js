@@ -143,12 +143,12 @@ router.put('/password',
 
 /**
  * @route   DELETE /auth/account
- * @desc    Delete user account (for donors only, with safety checks)
+ * @desc    Delete user account (anonymize donations)
  * @access  Private
  */
 router.delete('/account', 
-  authMiddleware.authenticate,
-  asyncHandler(async (req, res) => {
+  authMiddleware.authenticate, 
+  async (req, res) => {
     try {
       const userId = req.user.id;
       const userRole = req.user.role;
@@ -161,27 +161,39 @@ router.delete('/account',
         });
       }
       
-      // Check if user has any donations
-      const donationCount = await prisma.donation.count({
-        where: { donorId: userId }
-      });
-      
-      if (donationCount > 0) {
-        return res.status(400).json({
-          success: false,
-          message: `Cannot delete account with existing donations (${donationCount} donations found). Your donation history must be preserved for legal and transparency reasons.`,
-          donationCount
+      // Use a transaction to ensure atomicity
+      const result = await prisma.$transaction(async (tx) => {
+        // Count existing donations
+        const donationCount = await tx.donation.count({
+          where: { donorId: userId }
         });
-      }
-      
-      // Delete the user account
-      await prisma.user.delete({
-        where: { id: userId }
+        
+        // Anonymize all donations before deleting user
+        if (donationCount > 0) {
+          await tx.donation.updateMany({
+            where: { donorId: userId },
+            data: { 
+              anonymous: true,
+              // Optionally clear personal messages
+              message: null
+            }
+          });
+        }
+        
+        // Delete the user account
+        await tx.user.delete({
+          where: { id: userId }
+        });
+        
+        return donationCount;
       });
       
       res.status(200).json({
         success: true,
-        message: 'Account deleted successfully'
+        message: result > 0 
+          ? `Account deleted successfully. ${result} donations have been anonymized to preserve donation transparency.`
+          : 'Account deleted successfully.',
+        anonymizedDonations: result
       });
       
     } catch (error) {
@@ -191,7 +203,7 @@ router.delete('/account',
         message: 'Error deleting account'
       });
     }
-  })
+  }
 );
 
 /**

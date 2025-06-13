@@ -2,21 +2,23 @@
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
-// Get all charities with pagination and filtering
+// controllers/charityController.js - Update public queries
+
+// controllers/charityController.js - Update public queries
+
 export const getAllCharities = async (req, res) => {
   try {
-    console.log('GET /charities received with query:', req.query);
     const { page, limit, category, search, all } = req.query;
     
-    // Build filter object
-    const where = {};
+    // IMPORTANT: Only show ACTIVE charities to public
+    const where = {
+      status: 'ACTIVE' // This filters out SUSPENDED and CANCELLED charities
+    };
     
-    // Add category filter if provided
     if (category && category !== 'All Categories') {
       where.category = category;
     }
     
-    // Add search filter if provided
     if (search) {
       where.OR = [
         { name: { contains: search } },
@@ -25,23 +27,19 @@ export const getAllCharities = async (req, res) => {
         { address: { contains: search } }
       ];
     }
-    
-    // Determine if we should paginate or return all results
+
+    // Rest of the function remains the same...
     const shouldPaginate = !all && page && limit;
     
-    // Set up pagination options if needed
     const paginationOptions = shouldPaginate ? {
       skip: (Number(page) - 1) * Number(limit),
       take: Number(limit)
     } : {};
     
-    // Get charities with or without pagination
     const charities = await prisma.charity.findMany({
-      where,
+      where, // This now includes status: 'ACTIVE'
       ...paginationOptions,
-      orderBy: {
-        createdAt: 'desc'
-      },
+      orderBy: { createdAt: 'desc' },
       include: {
         _count: {
           select: {
@@ -49,9 +47,8 @@ export const getAllCharities = async (req, res) => {
             donations: true
           }
         },
-        // Include some active projects
         projects: {
-          where: { status: 'ACTIVE' },
+          where: { status: 'ACTIVE' }, // Also filter active projects
           take: 3,
           select: {
             id: true,
@@ -61,7 +58,6 @@ export const getAllCharities = async (req, res) => {
             status: true
           }
         },
-        // Include user (manager) info
         manager: {
           select: {
             id: true,
@@ -72,27 +68,20 @@ export const getAllCharities = async (req, res) => {
       }
     });
     
-    // Get total count for pagination
     const total = await prisma.charity.count({ where });
     
-    // Format response data
+    // Format response...
     const formattedCharities = charities.map(charity => ({
       id: charity.id,
       name: charity.name,
       description: charity.description,
       category: charity.category,
-      address: charity.address || null,
-      foundedYear: charity.foundedYear || null,
+      address: charity.address,
+      foundedYear: charity.foundedYear,
       createdAt: charity.createdAt,
-      manager: {
-        id: charity.manager.id,
-        name: charity.manager.name,
-        email: charity.manager.email
-      },
-      // Add a placeholder logo path - in a real app you'd have proper image handling
-      logo: `/uploads/charities/${charity.id}/logo.jpg`,
-      verified: true, // Assuming all charities in the system are verified
-      // Add impact metrics from counts - using the correct relation names
+      status: charity.status, // Include status in response
+      manager: charity.manager,
+      verified: true, // Active charities are verified
       impactMetrics: {
         donationsCount: charity._count.donations,
         projectsCount: charity._count.projects
@@ -100,21 +89,17 @@ export const getAllCharities = async (req, res) => {
       featuredProjects: charity.projects
     }));
     
-    // Format pagination info
-    const paginationInfo = shouldPaginate ? {
-      pagination: {
-        total,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(total / Number(limit))
-      }
-    } : { total };
-    
+    // Return response...
     res.status(200).json({
       success: true,
       data: {
         charities: formattedCharities,
-        ...paginationInfo
+        pagination: shouldPaginate ? {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / Number(limit))
+        } : { total }
       }
     });
   } catch (error) {
@@ -123,6 +108,332 @@ export const getAllCharities = async (req, res) => {
       success: false,
       message: 'Error retrieving charities',
       error: error.message
+    });
+  }
+};
+
+// Admin queries can see all statuses by filtering
+export const getAllCharitiesAdmin = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      search, 
+      category, 
+      status = 'all', // Admin can filter by status
+      sortBy = 'createdAt', 
+      sortOrder = 'desc' 
+    } = req.query;
+
+    const where = {};
+
+    // Status filter for admin
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search } },
+        { email: { contains: search } },
+        { registrationId: { contains: search } }
+      ];
+    }
+
+    if (category && category !== 'all') {
+      where.category = category;
+    }
+
+    // Rest of admin query...
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [charities, total] = await Promise.all([
+      prisma.charity.findMany({
+        where,
+        skip,
+        take: Number(limit),
+        orderBy: { [sortBy]: sortOrder },
+        include: {
+          manager: {
+            select: { id: true, name: true, email: true }
+          },
+          _count: {
+            select: {
+              projects: true,
+              donations: true
+            }
+          }
+        }
+      }),
+      prisma.charity.count({ where })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        charities,
+        pagination: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / Number(limit))
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching charities:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching charities',
+      error: error.message
+    });
+  }
+};
+// controllers/charityController.js - Charity manager can delete charity + their account
+
+export const deleteCharity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    
+    console.log(`🗑️ Manager ${userId} attempting to delete charity ID: ${id}`);
+    
+    // Check if charity exists and user is the manager
+    const charity = await prisma.charity.findUnique({
+      where: { 
+        id: Number(id),
+        deletedAt: null // Only find active charities
+      },
+      include: {
+        donations: {
+          where: { paymentStatus: 'SUCCEEDED' }
+        },
+        projects: {
+          include: {
+            donations: {
+              where: { paymentStatus: 'SUCCEEDED' }
+            }
+          }
+        }
+      }
+    });
+    
+    if (!charity) {
+      return res.status(404).json({
+        success: false,
+        message: 'Charity not found or already deleted'
+      });
+    }
+    
+    // Check if user is the manager of this charity
+    if (charity.managerId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only delete your own charity'
+      });
+    }
+    
+    console.log(`📊 Charity "${charity.name}" has ${charity.donations.length} donations`);
+    
+    // Always soft delete - mark charity as cancelled but keep user role
+    await prisma.$transaction(async (tx) => {
+      // Update charity status to CANCELLED
+      await tx.charity.update({
+        where: { id: Number(id) },
+        data: {
+          status: 'CANCELLED',
+          deletedAt: new Date(),
+          deletedBy: userId,
+          updatedAt: new Date()
+        }
+      });
+
+      // Cancel all active projects too
+      await tx.project.updateMany({
+        where: { 
+          charityId: Number(id),
+          status: 'ACTIVE'
+        },
+        data: {
+          status: 'CANCELLED',
+          updatedAt: new Date()
+        }
+      });
+
+      // Keep user role as 'charity' so they can reactivate
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Charity "${charity.name}" has been cancelled. You can reactivate it anytime from your dashboard.`,
+      action: 'CANCELLED',
+      data: {
+        charityId: Number(id),
+        charityName: charity.name,
+        canReactivate: true,
+        donationsPreserved: charity.donations.length,
+        projectsCancelled: charity.projects.length
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error deleting charity:', error);
+    
+    if (error.code === 'P2003') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete charity due to existing dependencies.'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting charity',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+// Optional: Add a function to restore cancelled charities (for admins)
+export const restoreCharity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Only admins can restore charities
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only administrators can restore cancelled charities'
+      });
+    }
+
+    const charity = await prisma.charity.findUnique({
+      where: { id: Number(id) }
+    });
+
+    if (!charity) {
+      return res.status(404).json({
+        success: false,
+        message: 'Charity not found'
+      });
+    }
+
+    if (charity.status !== 'CANCELLED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Charity is not cancelled and cannot be restored'
+      });
+    }
+
+    // Restore charity to active status
+    await prisma.charity.update({
+      where: { id: Number(id) },
+      data: {
+        status: 'ACTIVE',
+        deletedAt: null,
+        deletedBy: null,
+        updatedAt: new Date()
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Charity "${charity.name}" restored successfully`,
+      details: {
+        charityId: Number(id),
+        charityName: charity.name,
+        restoredBy: req.user.name,
+        restoredAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('Error restoring charity:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error restoring charity',
+      error: error.message
+    });
+  }
+};
+
+export const reactivateCharity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    
+    console.log(`🔄 Manager ${userId} attempting to reactivate charity ID: ${id}`);
+    
+    // Find cancelled charity
+    const charity = await prisma.charity.findUnique({
+      where: { 
+        id: Number(id),
+        status: 'CANCELLED'
+      },
+      include: {
+        projects: {
+          where: { status: 'CANCELLED' }
+        }
+      }
+    });
+    
+    if (!charity) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cancelled charity not found'
+      });
+    }
+    
+    // Check if user is the manager
+    if (charity.managerId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only reactivate your own charity'
+      });
+    }
+    
+    // Reactivate charity and projects
+    await prisma.$transaction(async (tx) => {
+      // Reactivate charity
+      await tx.charity.update({
+        where: { id: Number(id) },
+        data: {
+          status: 'ACTIVE',
+          deletedAt: null,
+          deletedBy: null,
+          updatedAt: new Date()
+        }
+      });
+
+      // Reactivate projects that were cancelled when charity was cancelled
+      await tx.project.updateMany({
+        where: { 
+          charityId: Number(id),
+          status: 'CANCELLED'
+        },
+        data: {
+          status: 'ACTIVE',
+          updatedAt: new Date()
+        }
+      });
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Charity "${charity.name}" has been reactivated successfully!`,
+      data: {
+        charityId: Number(id),
+        charityName: charity.name,
+        projectsReactivated: charity.projects.length
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error reactivating charity:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error reactivating charity',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 };
@@ -265,8 +576,8 @@ export const createCharity = async (req, res) => {
         category,
         address,
         foundedYear: foundedYear ? Number(foundedYear) : null,
-        managerId: userId, // Associate with user as manager
-        updatedAt: new Date() // Set initial updatedAt
+        managerId: userId,
+        updatedAt: new Date()
       }
     });
     
@@ -398,8 +709,7 @@ export const getCharityCategories = async (req, res) => {
     });
   }
 };
-
-// Get charity managed by the logged-in user
+// Get charity managed by the logged-in user (including cancelled ones)
 export const getCharityByManager = async (req, res) => {
   try {
     // Extract user ID from authenticated user
@@ -410,14 +720,16 @@ export const getCharityByManager = async (req, res) => {
     
     console.log('Looking for charity with managerId:', userIdInt);
     
-    // Find charity where the managerId matches the user's ID
+    // Find charity including cancelled ones (don't filter by deletedAt)
     const charity = await prisma.charity.findUnique({
       where: { managerId: userIdInt },
       include: {
         projects: {
           take: 3,
           orderBy: { createdAt: 'desc' },
-          where: { status: 'ACTIVE' }
+          where: { 
+            status: { in: ['ACTIVE', 'CANCELLED', 'PAUSED', 'COMPLETED'] } 
+          }
         },
         _count: {
           select: {
@@ -435,7 +747,7 @@ export const getCharityByManager = async (req, res) => {
       });
     }
     
-    // Format response
+    // Format response with soft delete information
     const formattedCharity = {
       id: charity.id,
       name: charity.name,
@@ -450,12 +762,27 @@ export const getCharityByManager = async (req, res) => {
       createdAt: charity.createdAt,
       updatedAt: charity.updatedAt,
       managerId: charity.managerId,
+      
+      // Add soft delete fields
+      status: charity.status,
+      deletedAt: charity.deletedAt,
+      deletedBy: charity.deletedBy,
+      
+      // Helper flags for frontend
+      isActive: charity.status === 'ACTIVE',
+      isCancelled: charity.status === 'CANCELLED',
+      canReactivate: charity.status === 'CANCELLED',
+      
       featuredProjects: charity.projects,
       stats: {
         donationsCount: charity._count.donations,
-        projectsCount: charity._count.projects
+        projectsCount: charity._count.projects,
+        activeProjectsCount: charity.projects.filter(p => p.status === 'ACTIVE').length,
+        cancelledProjectsCount: charity.projects.filter(p => p.status === 'CANCELLED').length
       }
     };
+    
+    console.log(`Found charity: ${charity.name} (Status: ${charity.status})`);
     
     res.status(200).json({
       success: true,
@@ -467,6 +794,52 @@ export const getCharityByManager = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error retrieving manager charity',
+      error: error.message
+    });
+  }
+};
+
+// Get only active charities for donation
+export const getActiveCharities = async (req, res) => {
+  try {
+    const charities = await prisma.charity.findMany({
+      where: {
+        // Add any additional conditions for "active" charities if needed
+        // For now, we'll assume all charities in the database are active
+      },
+      orderBy: {
+        name: 'asc'
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        mission: true,
+        category: true,
+        _count: {
+          select: {
+            projects: {
+              where: { status: 'ACTIVE' }
+            }
+          }
+        }
+      }
+    });
+
+    // Filter out charities that have no active projects
+    const charitiesWithActiveProjects = charities.filter(charity => 
+      charity._count.projects > 0
+    );
+
+    res.status(200).json({
+      success: true,
+      data: charitiesWithActiveProjects
+    });
+  } catch (error) {
+    console.error('Error fetching active charities:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching active charities',
       error: error.message
     });
   }

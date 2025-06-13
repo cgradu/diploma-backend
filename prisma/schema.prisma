@@ -21,20 +21,17 @@ model User {
   phone            String?
   
   donations        Donation[]
-  managedCharity   Charity?  // One user can manage only one charity
+  managedCharity   Charity?  // This stays the same (one-to-one)
 }
 
-model BlockchainVerification {
-  id              Int      @id @default(autoincrement())
-  transactionHash String   @unique
-  blockNumber     Int
-  timestamp       DateTime
-  verified        Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  donationId      Int      @unique
-  donation        Donation @relation(fields: [donationId], references: [id])
+// Add this enum to your schema.prisma
+enum CharityStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED  // Same as projects - when has donations but needs to be "deleted"
 }
 
+// Update your Charity model
 model Charity {
   id               Int              @id @default(autoincrement())
   name             String
@@ -49,13 +46,76 @@ model Charity {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   
-  managerId        Int            @unique  // One charity has exactly one manager
+  // NEW FIELDS
+  status           CharityStatus    @default(ACTIVE)
+  deletedAt        DateTime?
+  deletedBy        Int?            // Admin who deleted it
+  
+  managerId        Int              @unique
   manager          User             @relation(fields: [managerId], references: [id])
   
   donations        Donation[]
   projects         Project[]
 
   @@index([category])
+  @@index([status])  // Index for filtering by status
+}
+
+model Project {
+  id            Int            @id @default(autoincrement())
+  title         String
+  description   String         @db.Text
+  goal          Float
+  currentAmount Float          @default(0)
+  startDate     DateTime
+  endDate       DateTime?
+  status        Project_status @default(ACTIVE)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  charityId     Int?           // Make nullable
+  
+  donations     Donation[]
+  charity       Charity?       @relation(fields: [charityId], references: [id]) // Make optional
+
+  @@index([charityId])
+  @@index([status])
+}
+
+model Donation {
+  id                     Int                     @id @default(autoincrement())
+  amount                 Float
+  transactionId          String                  @unique
+  paymentIntentId        String?                 @unique
+  paymentStatus          PaymentStatus           @default(PENDING)
+  message                String?                 @db.Text
+  anonymous              Boolean                 @default(false)
+  createdAt              DateTime                @default(now())
+  donorId                Int?                    // Already nullable
+  charityId              Int?                    // Make nullable
+  projectId              Int?                    // Already nullable
+  currency               String                  @default("RON")
+  receiptUrl             String?
+  
+  blockchainVerification BlockchainVerification?
+  charity                Charity?                @relation(fields: [charityId], references: [id]) // Make optional
+  donor                  User?                   @relation(fields: [donorId], references: [id])
+  project                Project?                @relation(fields: [projectId], references: [id])
+  
+  @@index([charityId])
+  @@index([donorId])
+  @@index([projectId])
+}
+
+
+model BlockchainVerification {
+  id              Int      @id @default(autoincrement())
+  transactionHash String   @unique
+  blockNumber     Int
+  timestamp       DateTime
+  verified        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  donationId      Int      @unique
+  donation        Donation @relation(fields: [donationId], references: [id])
 }
 
 // Enums remain the same
@@ -71,51 +131,6 @@ enum BlockchainStatus {
   PENDING
   VERIFIED
   FAILED
-}
-
-model Donation {
-  id                     Int                     @id @default(autoincrement())
-  amount                 Float
-  transactionId          String                  @unique
-  paymentIntentId        String?                 @unique  // Stripe payment intent ID
-  paymentStatus          PaymentStatus           @default(PENDING)
-  message                String?                 @db.Text
-  anonymous              Boolean                 @default(false)
-  createdAt              DateTime                @default(now())
-  donorId                Int
-  charityId              Int
-  projectId              Int?
-  currency               String                  @default("RON")
-  receiptUrl             String?                 // URL to the Stripe receipt
-  
-  blockchainVerification BlockchainVerification?
-  charity                Charity                 @relation(fields: [charityId], references: [id])
-  donor                  User                    @relation(fields: [donorId], references: [id])
-  project                Project?                @relation(fields: [projectId], references: [id])
-  
-  @@index([charityId])
-  @@index([donorId])
-  @@index([projectId])
-}
-
-model Project {
-  id            Int            @id @default(autoincrement())
-  title         String
-  description   String         @db.Text
-  goal          Float
-  currentAmount Float          @default(0)
-  startDate     DateTime
-  endDate       DateTime?
-  status        Project_status @default(ACTIVE)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  charityId     Int
-  
-  donations     Donation[]
-  charity       Charity        @relation(fields: [charityId], references: [id])
-
-  @@index([charityId])
-  @@index([status])
 }
 
 enum Role {

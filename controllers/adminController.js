@@ -801,7 +801,211 @@ export const updateCharityAdmin = async (req, res) => {
   }
 };
 
+// controllers/adminController.js - Complete charity deletion implementation
+
 export const deleteCharity = async (req, res) => {
+  try {
+    // 1. Verify admin authorization
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Unauthorized. Admin access required.' 
+      });
+    }
+
+    const { id } = req.params;
+    console.log(`🗑️ Admin ${req.user.name} attempting to delete charity ID: ${id}`);
+
+    // 2. Get charity with all related data
+    const charity = await prisma.charity.findUnique({
+      where: { id: Number(id) },
+      include: {
+        donations: {
+          where: { paymentStatus: 'SUCCEEDED' }
+        },
+        projects: true,
+        manager: {
+          select: { id: true, name: true, email: true }
+        }
+      }
+    });
+
+    if (!charity) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Charity not found' 
+      });
+    }
+
+    console.log(`📊 Charity "${charity.name}" has ${charity.donations.length} donations and ${charity.projects.length} projects`);
+
+    // 3. Apply same logic as projects: Check if charity has donations
+    if (charity.donations.length > 0) {
+      console.log(`💰 Charity has ${charity.donations.length} donations - marking as CANCELLED`);
+      
+      // Mark charity as CANCELLED (like projects with donations)
+      await prisma.$transaction(async (tx) => {
+        // Update charity status to CANCELLED
+        await tx.charity.update({
+          where: { id: Number(id) },
+          data: {
+            status: 'CANCELLED',
+            deletedAt: new Date(),
+            deletedBy: req.user.id,
+            updatedAt: new Date()
+          }
+        });
+
+        // Cancel all projects too
+        await tx.project.updateMany({
+          where: { charityId: Number(id) },
+          data: {
+            status: 'CANCELLED',
+            updatedAt: new Date()
+          }
+        });
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `Charity "${charity.name}" cancelled (had existing donations)`,
+        action: 'CANCELLED',
+        details: {
+          charityId: Number(id),
+          charityName: charity.name,
+          donationsCount: charity.donations.length,
+          projectsAffected: charity.projects.length,
+          reason: 'Charity had existing donations - marked as cancelled to preserve data'
+        }
+      });
+    }
+
+    console.log(`🗑️ Charity has no donations - permanently deleting`);
+
+    // 4. If no donations, actually delete the charity and its projects
+    await prisma.$transaction(async (tx) => {
+      // Delete all projects (should have no donations if charity has none)
+      await tx.project.deleteMany({
+        where: { charityId: Number(id) }
+      });
+
+      // Delete the charity
+      await tx.charity.delete({
+        where: { id: Number(id) }
+      });
+    });
+
+    // 5. Update manager role if they have no other charity
+    try {
+      const managerHasOtherCharity = await prisma.charity.findFirst({
+        where: { managerId: charity.manager.id }
+      });
+
+      if (!managerHasOtherCharity) {
+        await prisma.user.update({
+          where: { id: charity.manager.id },
+          data: { role: 'donor' }
+        });
+        console.log(`👤 Updated manager ${charity.manager.email} role to donor`);
+      }
+    } catch (error) {
+      console.warn('Warning: Could not update manager role:', error.message);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Charity "${charity.name}" deleted successfully`,
+      action: 'DELETED',
+      details: {
+        charityId: Number(id),
+        charityName: charity.name,
+        projectsDeleted: charity.projects.length,
+        managerReverted: charity.manager.email,
+        reason: 'No donations found - charity and projects permanently deleted'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error deleting charity:', error);
+    
+    if (error.code === 'P2003') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete charity due to foreign key constraints'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting charity',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// Additional status management functions
+export const updateCharityStatus = async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['ACTIVE', 'SUSPENDED', 'CANCELLED'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status. Must be ACTIVE, SUSPENDED, or CANCELLED'
+      });
+    }
+
+    const updateData = {
+      status,
+      updatedAt: new Date()
+    };
+
+    if (status === 'CANCELLED' || status === 'SUSPENDED') {
+      updateData.deletedAt = new Date();
+      updateData.deletedBy = req.user.id;
+    } else {
+      updateData.deletedAt = null;
+      updateData.deletedBy = null;
+    }
+
+    const charity = await prisma.charity.update({
+      where: { id: Number(id) },
+      data: updateData
+    });
+
+    // If marking as cancelled, also cancel projects
+    if (status === 'CANCELLED') {
+      await prisma.project.updateMany({
+        where: { charityId: Number(id) },
+        data: {
+          status: 'CANCELLED',
+          updatedAt: new Date()
+        }
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Charity status updated to ${status}`,
+      data: charity
+    });
+
+  } catch (error) {
+    console.error('Error updating charity status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating charity status',
+      error: error.message
+    });
+  }
+};
+
+export const restoreCharity = async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Unauthorized' });
@@ -809,40 +1013,26 @@ export const deleteCharity = async (req, res) => {
 
     const { id } = req.params;
 
-    // Check if charity has donations or projects
-    const charity = await prisma.charity.findUnique({
+    const charity = await prisma.charity.update({
       where: { id: Number(id) },
-      include: {
-        donations: true,
-        projects: true
+      data: {
+        status: 'ACTIVE',
+        deletedAt: null,
+        deletedBy: null,
+        updatedAt: new Date()
       }
-    });
-
-    if (!charity) {
-      return res.status(404).json({ success: false, message: 'Charity not found' });
-    }
-
-    if (charity.donations.length > 0 || charity.projects.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot delete charity with existing donations or projects'
-      });
-    }
-
-    await prisma.charity.delete({
-      where: { id: Number(id) }
     });
 
     res.status(200).json({
       success: true,
-      message: 'Charity deleted successfully'
+      message: `Charity "${charity.name}" restored successfully`
     });
 
   } catch (error) {
-    console.error('Error deleting charity:', error);
+    console.error('Error restoring charity:', error);
     res.status(500).json({
       success: false,
-      message: 'Error deleting charity',
+      message: 'Error restoring charity',
       error: error.message
     });
   }

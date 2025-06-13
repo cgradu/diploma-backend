@@ -12,7 +12,8 @@ import {
   updateProjectFunding,
   getMyCharityProjects,
   getProjectCreationGuidelines,
-  validateProjectData
+  validateProjectData,
+  getActiveProjectsByCharityId
 } from '../controllers/projectController.js';
 
 const router = express.Router();
@@ -20,6 +21,7 @@ const router = express.Router();
 // Public routes - specific routes first, then parameterized routes
 router.get('/', getAllProjects);
 router.get('/statuses', getProjectStatuses);
+router.get('/active/charity/:charityId', getActiveProjectsByCharityId); // projects/active/charity/:charityId
 router.get('/guidelines', getProjectCreationGuidelines); // New endpoint for project creation guidelines
 router.get('/charity/:charityId', getProjectsByCharityId); // projects/charity/:charityId
 router.get('/:id', getProjectById); // This should come after other specific routes
@@ -42,5 +44,6 @@ router.delete('/:id', authorize('charity', 'admin'), deleteProject);
 
 // Admin-only route to update project funding
 router.put('/:id/funding', authorize('admin'), updateProjectFunding);
+// Add this route
 
 export default router;

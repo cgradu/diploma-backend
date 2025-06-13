@@ -139,6 +139,52 @@ export const login = async (req, res) => {
   }
 };
 
+// Delete user account (for donors only, with safety checks)
+export const deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    // Only allow donors to delete their own accounts
+    if (userRole !== 'donor') {
+      return res.status(403).json({
+        success: false,
+        message: 'Account deletion is only available for donors. Please contact support for assistance.'
+      });
+    }
+    
+    // Check if user has any donations
+    const donationCount = await prisma.donation.count({
+      where: { donorId: userId }
+    });
+    
+    if (donationCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete account with existing donations (${donationCount} donations found). Your donation history must be preserved for legal and transparency reasons.`,
+        donationCount
+      });
+    }
+    
+    // Delete the user account
+    await prisma.user.delete({
+      where: { id: userId }
+    });
+    
+    res.status(200).json({
+      success: true,
+      message: 'Account deleted successfully'
+    });
+    
+  } catch (error) {
+    console.error('Account deletion error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting account'
+    });
+  }
+};
+
 // Get current user profile
 export const getProfile = async (req, res) => {
   try {
@@ -701,5 +747,6 @@ export const authController = {
   validatePasswordEndpoint,
   requestPasswordReset,
   verifyResetToken,
+  deleteAccount,
   resetPassword
 };

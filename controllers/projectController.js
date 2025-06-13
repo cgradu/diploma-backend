@@ -953,3 +953,64 @@ export const validateProjectData = async (req, res) => {
     });
   }
 };
+
+// Get only active projects for a charity
+export const getActiveProjectsByCharityId = async (req, res) => {
+  try {
+    const { charityId } = req.params;
+    
+    if (!charityId || isNaN(charityId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid charity ID is required'
+      });
+    }
+    
+    const projects = await prisma.project.findMany({
+      where: {
+        charityId: Number(charityId),
+        status: 'ACTIVE'
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        goal: true,
+        currentAmount: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        _count: {
+          select: {
+            donations: {
+              where: { paymentStatus: 'SUCCEEDED' }
+            }
+          }
+        }
+      }
+    });
+    
+    // Calculate progress percentage for each project
+    const formattedProjects = projects.map(project => ({
+      ...project,
+      progressPercentage: Math.min(Math.round((project.currentAmount / project.goal) * 100), 100),
+      donationsCount: project._count.donations,
+      daysRemaining: project.endDate ? Math.max(0, Math.ceil((new Date(project.endDate) - new Date()) / (1000 * 60 * 60 * 24))) : null
+    }));
+    
+    res.status(200).json({
+      success: true,
+      data: formattedProjects
+    });
+  } catch (error) {
+    console.error('Error fetching active projects:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching active projects',
+      error: error.message
+    });
+  }
+};

@@ -28,24 +28,25 @@ const CHARITY_CATEGORIES = [
 ];
 
 const PROJECT_STATUSES = ['ACTIVE', 'COMPLETED', 'CANCELLED', 'PAUSED'];
+const CHARITY_STATUSES = ['ACTIVE', 'SUSPENDED', 'CANCELLED']; // Added charity statuses
 const PAYMENT_STATUSES = ['SUCCEEDED', 'FAILED', 'REFUNDED', 'PENDING'];
 const CURRENCIES = ['RON', 'USD', 'EUR'];
 
 // Sample names and data
 const FIRST_NAMES = [
-  'Alex', 'Maria', 'John', 'Ana', 'David', 'Elena', 'Michael', 'Ioana',
-  'Robert', 'Carmen', 'James', 'Andreea', 'William', 'Diana', 'Richard',
-  'Cristina', 'Thomas', 'Mihaela', 'Christopher', 'Simona', 'Daniel',
-  'Georgiana', 'Paul', 'Raluca', 'Mark', 'Alina', 'Steven', 'Oana',
-  'Kevin', 'Roxana', 'Brian', 'Camelia', 'Anthony', 'Teodora'
+  'Alex', 'Maria', 'Ion', 'Ana', 'David', 'Elena', 'Mihai', 'Ioana',
+  'Robert', 'Carmen', 'Marian', 'Andreea', 'Veronica', 'Diana', 'Radu',
+  'Cristina', 'Toma', 'Mihaela', 'Cristian', 'Simona', 'Daniel',
+  'Georgiana', 'Paul', 'Raluca', 'Marcu', 'Alina', 'Stefan', 'Oana',
+  'Vlad', 'Roxana', 'Bogdan', 'Camelia', 'Anton', 'Teodora'
 ];
 
 const LAST_NAMES = [
   'Popescu', 'Ionescu', 'Popa', 'Radu', 'Stoica', 'Gheorghe', 'Dima',
   'Constantin', 'Marin', 'Ilie', 'Tudose', 'Barbu', 'Nistor', 'Florea',
   'Petrescu', 'Manole', 'Georgescu', 'Tudor', 'Moldovan', 'Tomescu',
-  'Smith', 'Johnson', 'Williams', 'Brown', 'Davis', 'Miller', 'Wilson',
-  'Moore', 'Taylor', 'Anderson', 'Thomas', 'Jackson', 'White'
+  'Stefanescu', 'Popinciuc', 'Cizmaru', 'Craciun', 'Andrei', 'Chitu', 'Petrus',
+  'Bancescu', 'Calu', 'Max', 'Ciontu', 'Caramiziu', 'Petrescu'
 ];
 
 const ROMANIAN_CITIES = [
@@ -183,6 +184,38 @@ function getRandomDonationAmount() {
   return getRandomFloat(500, 2000); // 10% very large donations
 }
 
+// NEW: Function to determine charity status based on age and random factors
+function determineCharityStatus(createdAt, hasSuccessfulDonations) {
+  const charityAge = (new Date() - createdAt) / (1000 * 60 * 60 * 24); // days
+  const random = Math.random();
+  
+  // Most charities should be active (85%)
+  if (random < 0.85) {
+    return { status: 'ACTIVE', deletedAt: null, deletedBy: null };
+  }
+  
+  // Some charities might be suspended (10%)
+  if (random < 0.95) {
+    return { 
+      status: 'SUSPENDED', 
+      deletedAt: new Date(createdAt.getTime() + getRandomNumber(30, 365) * 24 * 60 * 60 * 1000),
+      deletedBy: null // Will be set to admin ID later
+    };
+  }
+  
+  // Few charities might be cancelled (5%) - only if they have donations
+  if (hasSuccessfulDonations && charityAge > 90) { // Only cancel older charities with donations
+    return { 
+      status: 'CANCELLED', 
+      deletedAt: new Date(createdAt.getTime() + getRandomNumber(60, 300) * 24 * 60 * 60 * 1000),
+      deletedBy: null // Will be set to admin ID later
+    };
+  }
+  
+  // Default to active if cancelled conditions not met
+  return { status: 'ACTIVE', deletedAt: null, deletedBy: null };
+}
+
 // Main seeding function
 async function main() {
   console.log('🌱 Starting comprehensive database seeding...');
@@ -192,7 +225,7 @@ async function main() {
   
   // Generate users
   const users = await generateUsers();
-  console.log(`✅ Created ${users.length} users`);
+  console.log(`✅ Created ${users.donors.length + users.charityManagers.length + users.admins.length} users`);
   
   // Generate charities
   const charities = await generateCharities(users.charityManagers);
@@ -205,6 +238,10 @@ async function main() {
   // Generate donations with realistic patterns
   const donations = await generateDonations(users.donors, charities, projects);
   console.log(`✅ Created ${donations.length} donations`);
+  
+  // Update charity statuses based on donations
+  await updateCharityStatuses(charities, users.admins);
+  console.log(`✅ Updated charity statuses`);
   
   // Generate blockchain verifications
   await generateBlockchainVerifications(donations);
@@ -279,7 +316,6 @@ async function generateUsers() {
       } catch (error) {
         if (error.code === 'P2002') {
           console.log(`Admin user ${adminData.email} already exists, skipping...`);
-          // Add to tracking set to prevent future conflicts
           usedEmails.add(adminData.email);
         } else {
           throw error;
@@ -389,6 +425,8 @@ async function generateCharities(charityManagers) {
     usedEmails.add(charityEmail);
     
     try {
+      const charityCreatedAt = getRandomDate(CONFIG.DONATIONS.DATE_RANGE_MONTHS - 2);
+      
       const charity = await prisma.charity.create({
         data: {
           name: `${template.name} ${getRandomNumber(1, 99)}`,
@@ -401,7 +439,11 @@ async function generateCharities(charityManagers) {
           address: generateAddress(city),
           foundedYear: getRandomNumber(1990, 2023),
           managerId: manager.id,
-          createdAt: getRandomDate(CONFIG.DONATIONS.DATE_RANGE_MONTHS - 2),
+          // Default status - will be updated later based on donations
+          status: 'ACTIVE',
+          deletedAt: null,
+          deletedBy: null,
+          createdAt: charityCreatedAt,
           updatedAt: new Date()
         }
       });
@@ -572,6 +614,49 @@ async function generateDonations(donors, charities, projects) {
   return donations;
 }
 
+// NEW: Update charity statuses based on donations and realistic patterns
+async function updateCharityStatuses(charities, admins) {
+  console.log('🏢 Updating charity statuses...');
+  
+  // Get admin user for deletedBy field
+  const adminUser = admins[0]; // Use first admin
+  
+  for (const charity of charities) {
+    // Check if charity has successful donations
+    const successfulDonations = await prisma.donation.findMany({
+      where: {
+        charityId: charity.id,
+        paymentStatus: 'SUCCEEDED'
+      }
+    });
+    
+    const hasSuccessfulDonations = successfulDonations.length > 0;
+    const statusInfo = determineCharityStatus(charity.createdAt, hasSuccessfulDonations);
+    
+    // Update charity with new status
+    await prisma.charity.update({
+      where: { id: charity.id },
+      data: {
+        status: statusInfo.status,
+        deletedAt: statusInfo.deletedAt,
+        deletedBy: statusInfo.deletedAt ? adminUser.id : null,
+        updatedAt: new Date()
+      }
+    });
+    
+    // If charity is cancelled, also cancel its projects
+    if (statusInfo.status === 'CANCELLED') {
+      await prisma.project.updateMany({
+        where: { charityId: charity.id },
+        data: {
+          status: 'CANCELLED',
+          updatedAt: new Date()
+        }
+      });
+    }
+  }
+}
+
 function generateDonationMessage() {
   const messages = [
     'Happy to support this great cause!',
@@ -635,9 +720,10 @@ async function printSummaryStatistics() {
   console.log('\n📈 SEEDING SUMMARY STATISTICS');
   console.log('=' .repeat(50));
   
-  const [userStats, charityStats, projectStats, donationStats, verificationStats] = await Promise.all([
+  const [userStats, charityStats, charityStatusStats, projectStats, donationStats, verificationStats] = await Promise.all([
     prisma.user.groupBy({ by: ['role'], _count: { role: true } }),
     prisma.charity.groupBy({ by: ['category'], _count: { category: true } }),
+    prisma.charity.groupBy({ by: ['status'], _count: { status: true } }), // NEW: Charity status stats
     prisma.project.groupBy({ by: ['status'], _count: { status: true } }),
     prisma.donation.groupBy({ by: ['paymentStatus'], _count: { paymentStatus: true } }),
     prisma.blockchainVerification.groupBy({ by: ['verified'], _count: { verified: true } })
@@ -648,6 +734,10 @@ async function printSummaryStatistics() {
   
   console.log('\n🏢 Charities by Category:');
   charityStats.forEach(stat => console.log(`  ${stat.category}: ${stat._count.category}`));
+  
+  // NEW: Charity status statistics
+  console.log('\n🏢 Charities by Status:');
+  charityStatusStats.forEach(stat => console.log(`  ${stat.status}: ${stat._count.status}`));
   
   console.log('\n📋 Projects by Status:');
   projectStats.forEach(stat => console.log(`  ${stat.status}: ${stat._count.status}`));
@@ -670,7 +760,46 @@ async function printSummaryStatistics() {
   console.log(`  Total Amount Raised: ${totalDonations._sum.amount?.toFixed(2) || 0} RON`);
   console.log(`  Average Donation: ${totalDonations._count > 0 ? (totalDonations._sum.amount / totalDonations._count).toFixed(2) : 0} RON`);
   
-  console.log('\n🎯 Ready for comprehensive statistics and graphs!');
+  // NEW: Charity status breakdown with donation counts
+  const charityStatusDetails = await Promise.all(
+    charityStatusStats.map(async (stat) => {
+      const charitiesWithDonations = await prisma.charity.findMany({
+        where: { status: stat.status },
+        include: {
+          _count: {
+            select: {
+              donations: {
+                where: { paymentStatus: 'SUCCEEDED' }
+              }
+            }
+          }
+        }
+      });
+      
+      const totalDonationsForStatus = charitiesWithDonations.reduce(
+        (sum, charity) => sum + charity._count.donations, 0
+      );
+      
+      return {
+        status: stat.status,
+        count: stat._count.status,
+        totalDonations: totalDonationsForStatus
+      };
+    })
+  );
+  
+  console.log('\n🏢 Charity Status Details:');
+  charityStatusDetails.forEach(detail => {
+    console.log(`  ${detail.status}: ${detail.count} charities, ${detail.totalDonations} total donations`);
+  });
+  
+  console.log('\n🎯 Ready for comprehensive testing with charity statuses!');
+  console.log('\n📝 Test Scenarios Available:');
+  console.log('  • Active charities with donations');
+  console.log('  • Suspended charities (admin action simulation)');
+  console.log('  • Cancelled charities (with preserved donations)');
+  console.log('  • Projects cancelled when charity cancelled');
+  console.log('  • Blockchain verifications for transparency');
 }
 
 // Execute the seed function
