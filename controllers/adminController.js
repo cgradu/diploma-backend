@@ -697,7 +697,7 @@ export const getAllCharitiesAdmin = async (req, res) => {
     const { 
       page = 1, 
       limit = 10, 
-      search, 
+      search,
       category, 
       sortBy = 'createdAt', 
       sortOrder = 'desc' 

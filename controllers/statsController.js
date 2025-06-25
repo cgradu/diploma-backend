@@ -169,6 +169,105 @@ export const getDonorStats = async (req, res) => {
 // SMART CONTRACT IMPLEMENTATIONS
 // ========================================
 
+async function enrichDonationHistory(donationHistory) {
+    console.log('🔍 Enriching donation history with donor names...');
+    
+    const enriched = [];
+    
+    for (const donation of donationHistory) {
+        let donorInfo = { name: 'Anonymous' };
+        
+        // Get donor info from database if not anonymous
+        if (!donation.isAnonymous && donation.donorId && donation.donorId !== '0') {
+            try {
+                const donor = await prisma.user.findUnique({
+                    where: { id: parseInt(donation.donorId) },
+                    select: { name: true, id: true }
+                });
+                
+                if (donor) {
+                    donorInfo = { 
+                        name: donor.name, 
+                        id: donor.id 
+                    };
+                }
+            } catch (error) {
+                console.error(`❌ Error fetching donor ${donation.donorId}:`, error);
+            }
+        }
+        
+        enriched.push({
+            ...donation,
+            donor: donorInfo
+        });
+    }
+    
+    console.log(`✅ Enriched ${enriched.length} donation records`);
+    return enriched;
+}
+
+// Add this function to your statsController.js file
+// Place it with the other helper functions at the bottom
+
+async function enrichDonationData(recentDonations) {
+    console.log('🔍 Enriching donation data with charity/donor names...');
+    
+    const enriched = [];
+    
+    for (const donation of recentDonations) {
+        let enrichedDonation = { ...donation };
+        
+        // Get charity info from database
+        if (donation.charityId) {
+            try {
+                const charity = await prisma.charity.findUnique({
+                    where: { id: parseInt(donation.charityId) },
+                    select: { name: true, category: true }
+                });
+                
+                if (charity) {
+                    enrichedDonation.charity = {
+                        name: charity.name,
+                        category: charity.category
+                    };
+                }
+            } catch (error) {
+                console.error(`❌ Error fetching charity ${donation.charityId}:`, error);
+                enrichedDonation.charity = { name: `Charity ${donation.charityId}`, category: 'UNKNOWN' };
+            }
+        }
+        
+        // Get donor info from database if not anonymous
+        if (!donation.isAnonymous && donation.donorId && donation.donorId !== '0') {
+            try {
+                const donor = await prisma.user.findUnique({
+                    where: { id: parseInt(donation.donorId) },
+                    select: { name: true, id: true }
+                });
+                
+                if (donor) {
+                    enrichedDonation.donor = {
+                        name: donor.name,
+                        id: donor.id
+                    };
+                } else {
+                    enrichedDonation.donor = { name: 'Unknown Donor' };
+                }
+            } catch (error) {
+                console.error(`❌ Error fetching donor ${donation.donorId}:`, error);
+                enrichedDonation.donor = { name: 'Unknown Donor' };
+            }
+        } else {
+            enrichedDonation.donor = { name: 'Anonymous' };
+        }
+        
+        enriched.push(enrichedDonation);
+    }
+    
+    console.log(`✅ Enriched ${enriched.length} donation records`);
+    return enriched;
+}
+
 async function getSmartContractHomepageStats() {
     const [platformStats, recentDonations, topCharities] = await Promise.all([
         blockchainService.getPlatformStats(),
@@ -199,15 +298,24 @@ async function getSmartContractHomepageStats() {
     };
 }
 
+// Update this function in your statsController.js:
+
 async function getSmartContractCharityStats(charityId, charity) {
+    console.log(`🔗 Fetching smart contract charity stats for charity ${charityId}...`);
+    
     const [charityStats, donationHistory, charityFlow] = await Promise.all([
         blockchainService.getCharityStats(charityId),
-        blockchainService.getCharityDonationHistory(charityId, 10),
+        blockchainService.getCharityDonationHistory(charityId, 20), // Get more to find unique donors
         blockchainService.getCharityFlow(charityId)
     ]);
 
+    console.log(`📊 Raw donation history: ${donationHistory.length} donations`);
+    
     // Enrich donation history with database info
     const enrichedHistory = await enrichDonationHistory(donationHistory);
+    
+    // Extract recent donors from blockchain donation history
+    const recentDonors = await getRecentDonorsFromBlockchain(donationHistory);
 
     return {
         charity: {
@@ -228,9 +336,66 @@ async function getSmartContractCharityStats(charityId, charity) {
             totalDisbursed: parseFloat(charityFlow.totalDisbursed),
             balance: parseFloat(charityFlow.balance)
         },
-        recentDonations: enrichedHistory,
+        recentDonations: enrichedHistory.slice(0, 10), // Limit to 10 for display
+        recentDonors: recentDonors, // NEW: Recent donors from blockchain
         source: 'smart_contract'
     };
+}
+
+// Add this helper function in your statsController.js:
+
+async function getRecentDonorsFromBlockchain(donationHistory) {
+    console.log('🔍 Extracting recent donors from blockchain data...');
+    
+    const recentDonors = [];
+    const seenDonors = new Set();
+    
+    // Sort donations by timestamp (most recent first)
+    const sortedDonations = donationHistory.sort((a, b) => 
+        new Date(b.timestamp) - new Date(a.timestamp)
+    );
+    
+    for (const donation of sortedDonations) {
+        // Skip anonymous donations or donations without donorId
+        if (donation.isAnonymous || !donation.donorId || donation.donorId === '0') {
+            continue;
+        }
+        
+        // Skip if we've already seen this donor
+        if (seenDonors.has(donation.donorId)) {
+            continue;
+        }
+        
+        try {
+            // Get donor name from database using donorId
+            const donor = await prisma.user.findUnique({
+                where: { id: parseInt(donation.donorId) },
+                select: { name: true, id: true }
+            });
+            
+            if (donor) {
+                recentDonors.push({
+                    id: donor.id,
+                    name: donor.name,
+                    lastDonationDate: donation.timestamp,
+                    lastDonationAmount: parseFloat(donation.amount)
+                });
+                seenDonors.add(donation.donorId);
+                
+                console.log(`✅ Added donor: ${donor.name} (ID: ${donor.id})`);
+                
+                // Limit to 5 recent donors
+                if (recentDonors.length >= 5) break;
+            } else {
+                console.warn(`⚠️ Donor not found in database: ID ${donation.donorId}`);
+            }
+        } catch (error) {
+            console.error(`❌ Error fetching donor ${donation.donorId}:`, error);
+        }
+    }
+    
+    console.log(`✅ Found ${recentDonors.length} recent donors`);
+    return recentDonors;
 }
 
 async function getSmartContractDonorStats(donorId) {
@@ -602,30 +767,59 @@ async function enrichCharityData(topCharities) {
     return enriched;
 }
 
-async function enrichDonationData(donations) {
-    const enriched = [];
-    for (const donation of donations) {
-        const charity = await prisma.charity.findUnique({
-            where: { id: parseInt(donation.charityId) },
-            select: { name: true }
-        });
-        
-        enriched.push({
-            ...donation,
-            charity: { name: charity?.name || `Charity ${donation.charityId}` }
-        });
-    }
-    return enriched;
-}
 
-async function enrichDonationHistory(donationHistory) {
-    // Similar enrichment for donation history
-    return donationHistory; // Simplified for now
-}
 
+
+// Replace the simplified version with this full implementation
 async function enrichDonorDonationHistory(donationHistory) {
-    // Similar enrichment for donor donation history
-    return donationHistory; // Simplified for now
+    console.log('🔍 Enriching donor donation history...');
+    
+    const enriched = [];
+    
+    for (const donation of donationHistory) {
+        let enrichedDonation = { ...donation };
+        
+        // Get charity info
+        if (donation.charityId) {
+            try {
+                const charity = await prisma.charity.findUnique({
+                    where: { id: parseInt(donation.charityId) },
+                    select: { name: true, category: true }
+                });
+                
+                if (charity) {
+                    enrichedDonation.charity = {
+                        name: charity.name,
+                        category: charity.category
+                    };
+                }
+            } catch (error) {
+                console.error(`❌ Error fetching charity ${donation.charityId}:`, error);
+            }
+        }
+        
+        // Get project info if available
+        if (donation.projectId && donation.projectId !== '0') {
+            try {
+                const project = await prisma.project.findUnique({
+                    where: { id: parseInt(donation.projectId) },
+                    select: { title: true }
+                });
+                
+                if (project) {
+                    enrichedDonation.project = {
+                        title: project.title
+                    };
+                }
+            } catch (error) {
+                console.error(`❌ Error fetching project ${donation.projectId}:`, error);
+            }
+        }
+        
+        enriched.push(enrichedDonation);
+    }
+    
+    return enriched;
 }
 
 function getMonthlyBreakdown(donations) {

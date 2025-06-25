@@ -14,7 +14,7 @@ export const authenticate = async (req, res, next) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ 
         success: false,
-        message: 'Authorization denied. No token provided.' 
+        message: 'Authorization denied. No token provid,ed.' 
       });
     }
     
@@ -26,6 +26,8 @@ export const authenticate = async (req, res, next) => {
         message: 'Authorization denied. Invalid token format.' 
       });
     }
+    
+
     
     // Verify token
     let decoded;
@@ -120,7 +122,7 @@ export const authenticate = async (req, res, next) => {
   }
 };
 
-// Role-based authorization middleware
+
 export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
@@ -141,11 +143,9 @@ export const authorize = (...roles) => {
   };
 };
 
-// Aliases for backward compatibility
 export const protect = authenticate;
 export const restrictTo = (...roles) => authorize(...roles);
 
-// Named export object for those importing as authMiddleware
 export const authMiddleware = {
   authenticate,
   authorize,

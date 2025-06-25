@@ -103,19 +103,17 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/auth', authRoutes);
 app.use('/charities', charityRoutes);
-app.use('/donations', donationRoutes); // Enhanced donation routes with blockchain features
+app.use('/donations', donationRoutes);
 app.use('/projects', projectRoutes);
 app.use('/admin', adminRoutes);
-app.use('/api/stats', statsRoutes); // Statistics routes
+app.use('/api/stats', statsRoutes); 
 
-// Root route with enhanced blockchain status
 app.get('/', async (req, res) => {
   try {
     let blockchainStatus = 'Not initialized';
@@ -176,70 +174,6 @@ app.get('/', async (req, res) => {
     res.status(500).json({
       message: 'API running with errors',
       error: error.message
-    });
-  }
-});
-
-// Enhanced health check endpoint
-app.get('/health', async (req, res) => {
-  try {
-    // Test database connection
-    await prisma.$queryRaw`SELECT 1+1 AS result`;
-    
-    // Test blockchain connection
-    let blockchainHealth = 'disconnected';
-    let blockchainDetails = {};
-    
-    if (blockchainService && blockchainVerificationService) {
-      try {
-        await blockchainService.initialize();
-        blockchainHealth = 'connected';
-        
-        // Get blockchain stats
-        const stats = await blockchainVerificationService.getVerificationStats();
-        blockchainDetails = {
-          verifiedDonations: stats.verifiedCount,
-          pendingVerifications: stats.pendingCount,
-          verificationRate: stats.verificationRate
-        };
-      } catch (error) {
-        blockchainHealth = 'error';
-        blockchainDetails = { error: error.message };
-      }
-    }
-    
-    // Get recent activity
-    const recentDonations = await prisma.donation.count({
-      where: {
-        paymentStatus: 'SUCCEEDED',
-        createdAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
-        }
-      }
-    });
-    
-    res.json({
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      services: {
-        database: 'connected',
-        blockchain: blockchainHealth
-      },
-      blockchain: blockchainDetails,
-      activity: {
-        recentDonations24h: recentDonations
-      },
-      memory: {
-        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
-        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + ' MB'
-      }
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'unhealthy',
-      error: error.message,
-      timestamp: new Date().toISOString()
     });
   }
 });

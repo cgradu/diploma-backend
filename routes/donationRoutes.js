@@ -27,12 +27,6 @@ router.post('/webhook', express.raw({ type: 'application/json' }), donationContr
 router.get('/:id/verification', authMiddleware.protect, donationController.getVerificationStatus);
 router.post('/:id/verify', authMiddleware.protect, donationController.verifyDonationOnBlockchain);
 
-/**
- * @route   GET /donations/blockchain/insights
- * @desc    Get blockchain-specific donation insights and transparency data
- * @access  Authenticated users only
- * @returns Blockchain verification status, transaction hashes, and transparency metrics
- */
 router.get('/blockchain/insights', authenticate, donationController.getBlockchainInsights);
 router.get('/blockchain/stats', authMiddleware.protect, authMiddleware.restrictTo('admin'), donationController.getBlockchainStats);
 router.get('/donor/dashboard-stats', authenticate, donationController.getDonorDashboardStats);

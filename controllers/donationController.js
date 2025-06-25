@@ -293,51 +293,6 @@ const confirmPayment = async (req, res) => {
   }
 };
 
-// Get user's donation history
-const getDonationHistory = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    
-    const donations = await prisma.donation.findMany({
-      where: {
-        donorId: userId
-      },
-      include: {
-        charity: {
-          select: {
-            id: true,
-            name: true,
-            category: true
-          }
-        },
-        Project: {
-          select: {
-            id: true,
-            title: true,
-            status: true
-          }
-        },
-        BlockchainVerification: {
-          select: {
-            transactionHash: true,
-            verified: true,
-            timestamp: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
-    
-    return res.status(200).json(donations);
-    
-  } catch (error) {
-    console.error('Error fetching donation history:', error);
-    return res.status(500).json({ error: 'Failed to retrieve donation history' });
-  }
-};
-
 // Get donation details
 const getDonationDetails = async (req, res) => {
   try {
@@ -1231,6 +1186,51 @@ const getMyDonations = async (req, res) => {
       success: false,
       error: 'Failed to retrieve donation history' 
     });
+  }
+};
+
+// // Get user's donation history
+const getDonationHistory = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const donations = await prisma.donation.findMany({
+      where: {
+        donorId: userId
+      },
+      include: {
+        charity: {
+          select: {
+            id: true,
+            name: true,
+            category: true
+          }
+        },
+        Project: {
+          select: {
+            id: true,
+            title: true,
+            status: true
+          }
+        },
+        BlockchainVerification: {
+          select: {
+            transactionHash: true,
+            verified: true,
+            timestamp: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+    
+    return res.status(200).json(donations);
+    
+  } catch (error) {
+    console.error('Error fetching donation history:', error);
+    return res.status(500).json({ error: 'Failed to retrieve donation history' });
   }
 };
 

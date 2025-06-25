@@ -1,5 +1,3 @@
-// Modified schema.prisma with one-to-one charity-manager relationship
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -21,17 +19,9 @@ model User {
   phone            String?
   
   donations        Donation[]
-  managedCharity   Charity?  // This stays the same (one-to-one)
+  managedCharity   Charity? 
 }
 
-// Add this enum to your schema.prisma
-enum CharityStatus {
-  ACTIVE
-  SUSPENDED
-  CANCELLED  // Same as projects - when has donations but needs to be "deleted"
-}
-
-// Update your Charity model
 model Charity {
   id               Int              @id @default(autoincrement())
   name             String
@@ -106,7 +96,6 @@ model Donation {
   @@index([projectId])
 }
 
-
 model BlockchainVerification {
   id              Int      @id @default(autoincrement())
   transactionHash String   @unique
@@ -118,7 +107,12 @@ model BlockchainVerification {
   donation        Donation @relation(fields: [donationId], references: [id])
 }
 
-// Enums remain the same
+enum CharityStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED  // Same as projects - when has donations but needs to be "deleted"
+}
+
 enum PaymentStatus {
   PENDING
   PROCESSING

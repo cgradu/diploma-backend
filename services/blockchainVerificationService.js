@@ -21,7 +21,6 @@ class BlockchainVerificationService {
    */
   async verifyDonation(donationId) {
     try {
-      console.log(`🔍 Starting blockchain verification for donation ID: ${donationId}`);
       
       // Get the donation with all necessary data
       const donation = await prisma.donation.findUnique({
@@ -44,13 +43,6 @@ class BlockchainVerificationService {
         return donation.blockchainVerification;
       }
 
-      console.log(`📝 Recording donation on blockchain:`, {
-        id: donation.id,
-        amount: donation.amount,
-        charity: donation.charity.name,
-        donor: donation.anonymous ? 'Anonymous' : donation.donor.name
-      });
-
       // Prepare donation data for blockchain
       const blockchainDonationData = {
         transactionId: donation.transactionId,
@@ -65,7 +57,6 @@ class BlockchainVerificationService {
       // Record on blockchain
       const blockchainResult = await this.blockchainService.recordDonation(blockchainDonationData);
       
-      console.log(`🔗 Blockchain recording result:`, blockchainResult);
 
       // Create or update blockchain verification record
       let verification;
@@ -93,15 +84,10 @@ class BlockchainVerificationService {
           }
         });
       }
-
-      console.log(`✅ Blockchain verification completed for donation ${donationId}`);
-      console.log(`📋 Transaction Hash: ${verification.transactionHash}`);
-      console.log(`📦 Block Number: ${verification.blockNumber}`);
-
       return verification;
 
     } catch (error) {
-      console.error(`❌ Blockchain verification failed for donation ${donationId}:`, error);
+      console.error(`Blockchain verification failed for donation ${donationId}:`, error);
       
       // Create a pending verification record even if blockchain fails
       let verification;
@@ -132,11 +118,11 @@ class BlockchainVerificationService {
           });
         }
 
-        console.log(`⚠️ Created pending verification record for donation ${donationId}`);
+        console.log(`Created pending verification record for donation ${donationId}`);
         return verification;
       } catch (dbError) {
-        console.error(`❌ Failed to create pending verification record:`, dbError);
-        throw error; // Re-throw original error
+        console.error(`Failed to create pending verification record:`, dbError);
+        throw error;
       }
     }
   }
@@ -327,10 +313,6 @@ class BlockchainVerificationService {
     }
   }
 
-  /**
-   * Get blockchain verification statistics
-   * @returns {Promise<Object>} Verification statistics
-   */
   async getVerificationStats() {
     try {
       const totalDonations = await prisma.donation.count({

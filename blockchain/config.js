@@ -3,9 +3,12 @@ import { ethers, Wallet} from 'ethers';
 import dotenv from 'dotenv';
 import { CONTRACT_ABI } from './contractABI.js';
 
-dotenv.config({override: true});
+
+
+
 
 const NETWORK = process.env.BLOCKCHAIN_NETWORK;
+export const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS;
 
 // Network configurations
 const networks = {
@@ -15,12 +18,12 @@ const networks = {
     name: 'Localhost'
   },
   sepolia: {
-    url: `https://sepolia.infura.io/v3/416d976e9cf04600a91b11bb9e07290d`,
     chainId: 11155111,
+    url: `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`,
     name: 'Sepolia Testnet'
   },
   mainnet: {
-    url: `https://mainnet.infura.io/v3/416d976e9cf04600a91b11bb9e07290d`,
+    url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
     chainId: 1,
     name: 'Ethereum Mainnet'
   }
@@ -86,34 +89,26 @@ const validateConfig = () => {
   console.log('✅ Blockchain configuration validation passed');
 };
 
-// Enhanced provider creation with retry logic
+
 export const getProvider = async (retries = 3) => {
   validateConfig();
   
   const network = networks[NETWORK];
-  console.log(`🌐 Connecting to ${network.name}...`);
   
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const provider = new ethers.JsonRpcProvider(network.url);
-      console.log(`🔗 Provider URL: ${network.url}`);
-      
-      // Test the connection
-      const blockNumber = await provider.getBlockNumber();
-      console.log(`✅ Connected to ${network.name} - Block #${blockNumber}`);
-      
+      const provider = new ethers.JsonRpcProvider(network.url);    
       // Verify chain ID
       const chainInfo = await provider.getNetwork();
       if (chainInfo.chainId !== BigInt(network.chainId)) {
         throw new Error(`Chain ID mismatch. Expected: ${network.chainId}, Got: ${chainInfo.chainId}`);
       }
-      
       return provider;
     } catch (error) {
-      console.error(`❌ Connection attempt ${attempt}/${retries} failed:`, error.message);
+      console.error(`Connection attempt ${attempt}/${retries} failed:`, error.message);
       
       if (attempt === retries) {
-        // Provide helpful error messages
+        // Handle error cases
         if (error.message.includes('401')) {
           throw new Error('Authentication failed - check your INFURA_API_KEY');
         } else if (error.message.includes('ENOTFOUND')) {
@@ -125,7 +120,6 @@ export const getProvider = async (retries = 3) => {
         }
       }
       
-      // Wait before retry
       await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
     }
   }
@@ -142,20 +136,11 @@ export const getWallet = async () => {
     const provider = new ethers.JsonRpcProvider(network.url);
     const wallet = new Wallet(privateKey, provider); // signer
 
-    console.log(`💼 Wallet address: ${wallet.address}`);
-
-    const balance = await provider.getBalance(wallet.address);
-    console.log(`💰 Wallet balance: ${ethers.formatEther(balance)} ETH`);
-
     return { wallet };
   } catch (error) {
     throw new Error(`Failed to create wallet: ${error.message}`);
   }
 };
-
-
-export const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS;
-export { CONTRACT_ABI };
 
 // Enhanced test connection function with detailed diagnostics
 export const testConnection = async () => {
@@ -246,27 +231,4 @@ export const getNetworkInfo = () => {
   };
 };
 
-// Health check function for monitoring
-export const healthCheck = async () => {
-  try {
-    const provider = await getProvider();
-    const blockNumber = await provider.getBlockNumber();
-    const wallet = await getWallet();
-    const balance = await provider.getBalance(wallet.address);
-    
-    return {
-      status: 'healthy',
-      network: networks[NETWORK].name,
-      blockNumber,
-      walletAddress: wallet.address,
-      walletBalance: ethers.formatEther(balance),
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    return {
-      status: 'unhealthy',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    };
-  }
-};
+export { CONTRACT_ABI };

@@ -53,6 +53,4 @@ router.use((error, req, res, next) => {
     });
 });
 
-console.log('✅ Statistics routes configured successfully');
-
 export default router;
