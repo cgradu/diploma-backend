@@ -1,9 +1,9 @@
 // prisma/comprehensiveSeed.js
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma/client.js';  // Changed this line
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
+
 
 // Configuration for data generation
 const CONFIG = {

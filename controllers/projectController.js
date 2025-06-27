@@ -1,6 +1,5 @@
 // controllers/projectController.js - Enhanced version
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { prisma } from '../prisma/client.js';  // Changed this line
 
 // Import existing functions from your current controller
 // Get all projects with pagination and filtering

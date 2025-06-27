@@ -1,21 +1,12 @@
 // backend/controllers/statsController.js - COMPLETE IMPLEMENTATION WITH FALLBACK
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma/client.js';  // Changed this line
 import BlockchainVerificationService from '../services/blockchainVerificationService.js';
 import BlockchainService from '../services/blockchainService.js';
-
-const prisma = new PrismaClient();
 
 // Initialize services
 const verificationService = new BlockchainVerificationService();
 const blockchainService = new BlockchainService();
 
-verificationService.initialize().catch(error => {
-    console.warn('⚠️ BlockchainVerificationService initialization failed:', error.message);
-});
-
-blockchainService.initialize().catch(error => {
-    console.warn('⚠️ BlockchainService initialization failed:', error.message);
-});
 
 // ========================================
 // HOMEPAGE STATISTICS - WITH SMART CONTRACT + DATABASE FALLBACK

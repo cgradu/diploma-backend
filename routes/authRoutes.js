@@ -1,10 +1,9 @@
 // routes/authRoutes.js - Complete implementation with password validation
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import { PrismaClient } from '@prisma/client';
-
+import { prisma } from '../prisma/client.js';
 const router = express.Router();
-const prisma = new PrismaClient();
+
 
 // Import controllers and middleware
 import { authController } from '../controllers/authController.js';

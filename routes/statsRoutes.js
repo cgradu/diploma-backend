@@ -11,8 +11,6 @@ import auth from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-console.log('📊 Setting up statistics routes...');
-
 // ==========================================
 // PUBLIC ROUTES (no authentication needed)
 // ==========================================

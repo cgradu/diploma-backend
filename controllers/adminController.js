@@ -1,9 +1,9 @@
 // controllers/adminController.js
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma/client.js';  // Changed this line
 import bcrypt from 'bcryptjs';
 import { validatePassword } from '../utils/passwordValidation.js';
 
-const prisma = new PrismaClient();
+
 export const getDashboardStats = async (req, res) => {
   try {
     // Check admin authorization

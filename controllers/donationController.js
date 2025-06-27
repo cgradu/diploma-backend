@@ -1,11 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma/client.js';  // Changed this line
 import Stripe from 'stripe';
 import crypto from 'crypto';
 import blockchainService from '../services/blockchainService.js'; // Add this import
 import BlockchainVerificationService from '../services/blockchainVerificationService.js';
 import { get } from 'http';
 
-const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Create a payment intent
@@ -199,7 +198,6 @@ const confirmPayment = async (req, res) => {
       console.log("Recording donation on blockchain via verification service...");
 
       const verificationService = new BlockchainVerificationService();
-      await verificationService.initialize(); // Ensure service is initialized
       blockchainVerification = verificationService.verifyDonation(donation.id);
       
       console.log("Blockchain verification successful:", blockchainVerification);

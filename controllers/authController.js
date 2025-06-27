@@ -1,10 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma/client.js';  // Changed this line
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { validatePassword } from '../utils/passwordValidation.js';
 
-const prisma = new PrismaClient();
+
 
 // Register a new user with password validation
 export const register = async (req, res) => {

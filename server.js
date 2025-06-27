@@ -4,9 +4,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Prisma client
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { prisma } from './prisma/client.js';  // Changed this line
 
 // Import blockchain services
 import BlockchainService from './services/blockchainService.js';
@@ -36,64 +34,14 @@ async function initializeBlockchainServices() {
     await blockchainService.initialize();
     
     blockchainVerificationService = new BlockchainVerificationService();
-    await blockchainVerificationService.initialize();
     
     console.log('✅ Blockchain services initialized successfully');
-    
-    // Start background verification process for pending donations
-    startBackgroundVerification();
     
   } catch (error) {
     console.error('⚠️ Blockchain services initialization failed:', error.message);
     console.log('🔄 Application will continue in fallback mode');
   }
 }
-
-// // Background process to verify pending donations
-// async function startBackgroundVerification() {
-//   setInterval(async () => {
-//     try {
-//       console.log('🔍 Running background blockchain verification...');
-      
-//       // Get unverified donations
-//       const unverifiedDonations = await prisma.donation.findMany({
-//         where: {
-//           paymentStatus: 'SUCCEEDED',
-//           OR: [
-//             { blockchainVerification: null },
-//             { 
-//               blockchainVerification: {
-//                 verified: false,
-//                 transactionHash: {
-//                   startsWith: 'pending_'
-//                 }
-//               }
-//             }
-//           ]
-//         },
-//         take: 5 // Process 5 at a time to avoid overwhelming the system
-//       });
-
-//       if (unverifiedDonations.length > 0) {
-//         console.log(`📝 Found ${unverifiedDonations.length} donations to verify`);
-        
-//         for (const donation of unverifiedDonations) {
-//           try {
-//             await blockchainVerificationService.verifyDonation(donation.id);
-//             console.log(`✅ Verified donation ${donation.id}`);
-//           } catch (error) {
-//             console.error(`❌ Failed to verify donation ${donation.id}:`, error.message);
-//           }
-//         }
-//       }
-//     } catch (error) {
-//       console.error('Background verification error:', error);
-//     }
-//   }, 5 * 60 * 1000); // Run every 5 minutes
-// }
-
-// Webhook middleware (must be before express.json())
-app.use('/donations/webhook', express.raw({ type: 'application/json' }), donationController.handleWebhook);
 
 // CORS configuration
 app.use(cors({
@@ -121,8 +69,6 @@ app.get('/', async (req, res) => {
     
     if (blockchainService && blockchainVerificationService) {
       try {
-        // Test blockchain connection
-        await blockchainService.initialize();
         blockchainStatus = 'Connected and operational';
         
         // Get verification statistics

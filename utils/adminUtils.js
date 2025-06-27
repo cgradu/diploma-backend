@@ -1,7 +1,5 @@
 // utils/adminUtils.js
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../prisma/client.js';  // Changed this line
 
 /**
  * Generate CSV export data for any entity

@@ -1,18 +1,36 @@
 // prisma/client.js
 import { PrismaClient } from '@prisma/client';
 
-// Declare global variable for prisma
 let prisma;
 
-// Check if we are in production
 if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
+  prisma = new PrismaClient({
+    log: ['error'],
+    errorFormat: 'minimal'
+  });
 } else {
   // In development, use a global variable to avoid multiple instances
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
+  if (!globalThis.prisma) {
+    globalThis.prisma = new PrismaClient({
+      log: ['error', 'warn'],
+      errorFormat: 'pretty'
+    });
   }
-  prisma = global.prisma;
+  prisma = globalThis.prisma;
 }
+
+// Add connection error handling
+prisma.$connect()
+  .then(() => {
+    console.log('✅ Prisma client connected successfully');
+  })
+  .catch((error) => {
+    console.error('❌ Prisma client connection failed:', error);
+  });
+
+// Graceful shutdown
+process.on('beforeExit', async () => {
+  await prisma.$disconnect();
+});
 
 export { prisma };

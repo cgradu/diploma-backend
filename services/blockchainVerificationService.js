@@ -1,9 +1,9 @@
 // backend/services/blockchainVerificationService.js
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma/client.js';  // Changed this line
 import BlockchainService from './blockchainService.js';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
+
 
 class BlockchainVerificationService {
   constructor() {
@@ -14,11 +14,6 @@ class BlockchainVerificationService {
     await this.blockchainService.initialize();
   }
 
-  /**
-   * Verify a donation on the blockchain
-   * @param {number} donationId - The ID of the donation to verify
-   * @returns {Promise<Object>} The blockchain verification record
-   */
   async verifyDonation(donationId) {
     try {
       
